@@ -2908,9 +2908,9 @@
   {
     "type":   "npz",
     "target": "mlp.npz",
-    "source": "https://github.com/lutzroeder/netron/files/3666244/mlp.zip[mlp.npz]",
+    "source": "https://github.com/lutzroeder/netron/files/6225731/mlp.zip[mlp.npz]",
     "format": "NumPy Zip",
-    "link":   "https://github.com/lutzroeder/netron/issues/337"
+    "link":   "https://github.com/lutzroeder/netron/issues/711"
   },
   {
     "type":   "npz",
@@ -2921,10 +2921,24 @@
   },
   {
     "type":   "npz",
+    "target": "numpy.array.pkl",
+    "source": "https://github.com/lutzroeder/netron/files/6233588/numpy.array.pkl.zip[numpy.array.pkl]",
+    "format": "NumPy NDArray",
+    "link":   "https://github.com/lutzroeder/netron/issues/711"
+  },
+  {
+    "type":   "npz",
     "target": "R-50.pkl",
     "source": "https://dl.fbaipublicfiles.com/detectron/ImageNetPretrained/MSRA/R-50.pkl",
     "format": "NumPy Weights",
     "link":   "https://github.com/facebookresearch/Detectron"
+  },
+  {
+    "type":   "npz",
+    "target": "tensor.npy",
+    "source": "https://github.com/lutzroeder/netron/files/6225732/tensor.npy.zip[tensor.npy]",
+    "format": "NumPy Array",
+    "link":   "https://github.com/lutzroeder/netron/issues/711"
   },
   {
     "type":   "onnx",

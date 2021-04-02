@@ -1174,15 +1174,17 @@ view.ModelContext = class {
     open(type) {
         if (!this._content.has(type)) {
             this._content.set(type, undefined);
+            let reset = false;
             switch (type) {
                 case 'json': {
                     try {
+                        reset = true;
                         const reader = json.TextReader.create(this.stream.peek());
                         const obj = reader.read();
                         this._content.set(type, obj);
                     }
                     catch (err) {
-                        this.stream.seek(0);
+                        // continue regardless of error
                     }
                     break;
                 }
@@ -1204,6 +1206,7 @@ view.ModelContext = class {
                                 return false;
                             };
                             if (match(stream)) {
+                                reset = true;
                                 const unpickler = new python.Unpickler(stream);
                                 const execution = new python.Execution(null, (error, fatal) => {
                                     const message = error && error.message ? error.message : error.toString();
@@ -1215,9 +1218,13 @@ view.ModelContext = class {
                         }
                     }
                     catch (err) {
-                        this.stream.seek(0);
+                        // continue regardless of error
                     }
+                    break;
                 }
+            }
+            if (reset) {
+                this.stream.seek(0);
             }
         }
         return this._content.get(type);
@@ -1227,12 +1234,20 @@ view.ModelContext = class {
         let tags = this._tags.get(type);
         if (!tags) {
             tags = new Map();
-            const signature = [ 0x50, 0x4B, 0x03, 0x04 ];
-            if (this.stream.length < 4 || !this.stream.peek(4).every((value, index) => value === signature[index])) {
+            let reset = false;
+            const signatures = [
+                // Reject PyTorch models
+                [ 0x80, undefined, 0x8a, 0x0a, 0x6c, 0xfc, 0x9c, 0x46, 0xf9, 0x20, 0x6a, 0xa8, 0x50, 0x19 ],
+                // Reject TorchScript models
+                [ 0x50, 0x4b ]
+            ];
+            const stream = this.stream;
+            if (!signatures.some((signature) => signature.length <= stream.length && stream.peek(signature.length).every((value, index) => signature[index] === undefined || signature[index] === value))) {
                 try {
                     switch (type) {
                         case 'pbtxt': {
-                            const decoder = base.TextDecoder.create(this.stream.peek());
+                            reset = true;
+                            const decoder = base.TextDecoder.create(stream.peek());
                             let count = 0;
                             for (let i = 0; i < 0x100; i++) {
                                 const c = decoder.decode();
@@ -1243,7 +1258,7 @@ view.ModelContext = class {
                                 }
                             }
                             if (count < 4) {
-                                const reader = protobuf.TextReader.create(this.stream.peek());
+                                const reader = protobuf.TextReader.create(stream.peek());
                                 reader.start(false);
                                 while (!reader.end(false)) {
                                     const tag = reader.tag();
@@ -1264,7 +1279,8 @@ view.ModelContext = class {
                             break;
                         }
                         case 'pb': {
-                            const reader = protobuf.Reader.create(this.stream.peek());
+                            reset = true;
+                            const reader = protobuf.Reader.create(stream.peek());
                             const length = reader.length;
                             while (reader.position < length) {
                                 const tag = reader.uint32();
@@ -1289,8 +1305,10 @@ view.ModelContext = class {
                 }
                 catch (error) {
                     tags = new Map();
-                    this.stream.seek(0);
                 }
+            }
+            if (reset) {
+                this.stream.seek(0);
             }
             this._tags.set(type, tags);
         }
@@ -1359,7 +1377,7 @@ view.ModelFactoryService = class {
         this._host = host;
         this._extensions = [];
         this.register('./pytorch', [ '.pt', '.pth', '.pt1', '.pyt', '.pkl', '.h5', '.t7', '.model', '.dms', '.tar', '.ckpt', '.chkpt', '.tckpt', '.bin', '.pb', '.zip', '.nn' ]);
-        this.register('./onnx', [ '.onnx', '.pb', '.pbtxt', '.prototxt', '.model' ]);
+        this.register('./onnx', [ '.onnx', '.pb', '.pbtxt', '.prototxt', '.model', '.pt', '.pth', '.pkl' ]);
         this.register('./mxnet', [ '.mar', '.model', '.json', '.params' ]);
         this.register('./coreml', [ '.mlmodel' ]);
         this.register('./caffe', [ '.caffemodel', '.pbtxt', '.prototxt', '.pt', '.txt' ]);
@@ -1369,7 +1387,7 @@ view.ModelFactoryService = class {
         this.register('./tf', [ '.pb', '.meta', '.pbtxt', '.prototxt', '.pt', '.json', '.index', '.ckpt', '.graphdef', /.data-[0-9][0-9][0-9][0-9][0-9]-of-[0-9][0-9][0-9][0-9][0-9]$/, /^events.out.tfevents./ ]);
         this.register('./mediapipe', [ '.pbtxt' ]);
         this.register('./uff', [ '.uff', '.pb', '.pbtxt', '.uff.txt', '.trt', '.engine' ]);
-        this.register('./npz', [ '.npz', '.pkl' ]);
+        this.register('./npz', [ '.npz', '.npy', '.pkl' ]);
         this.register('./lasagne', [ '.pkl', '.pickle', '.joblib', '.model', '.pkl.z', '.joblib.z' ]);
         this.register('./lightgbm', [ '.txt', '.pkl' ]);
         this.register('./sklearn', [ '.pkl', '.pickle', '.joblib', '.model', '.meta', '.pb', '.pt', '.h5', '.pkl.z', '.joblib.z' ]);
@@ -1745,6 +1763,7 @@ view.ModelFactoryService = class {
         /* eslint-disable no-control-regex */
         const entries = [
             { name: 'ELF executable', value: /^\x7FELF/ },
+            { name: 'PNG image', value: /^\x89PNG/ },
             { name: 'Git LFS header', value: /^version https:\/\/git-lfs.github.com/ },
             { name: 'Git LFS header', value: /^\s*oid sha256:/ },
             { name: 'HTML markup', value: /^\s*<html>/ },
@@ -1754,7 +1773,7 @@ view.ModelFactoryService = class {
             { name: 'Unity metadata', value: /^fileFormatVersion:/ },
             { name: 'Python source code', value: /^\s*import[ ]+(os|sys|types|torch|argparse|onnx|numpy|tensorflow)(,|;|\s)/ },
             { name: 'Python source code', value: /^\s*import[ ]+([a-z])+[ ]+as[ ]+/ },
-            { name: 'NumPy Array', value: /^\x93NUMPY/ },
+            { name: 'Python source code', value: /^\s*from[ ]+(torch)[ ]+import[ ]+/ },
             { name: 'undocumented TensorRT engine data', value: /^ptrt/ },
             { name: 'TSD header', value: /^%TSD-Header-###%/ },
             { name: "TensorFlow Hub module", value: /^\x08\x03$/, identifier: 'tfhub_module.pb' }

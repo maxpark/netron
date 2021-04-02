@@ -8,13 +8,12 @@ var python = python || require('./python');
 npz.ModelFactory = class {
 
     match(context) {
-        const entries = context.entries('zip');
-        if (entries.length > 0 && entries.every((entry) => entry.name.endsWith('.npy'))) {
-            return true;
-        }
-        const obj = context.open('pkl');
-        if (obj && npz.Utility.weights(obj)) {
-            return true;
+        switch (npz.Utility.format(context)) {
+            case 'npy':
+            case 'npz':
+            case 'pickle':
+            case 'numpy.ndarray':
+                return true;
         }
         return false;
     }
@@ -23,77 +22,113 @@ npz.ModelFactory = class {
         return context.require('./numpy').then((numpy) => {
             let format = '';
             const groups = new Map();
-            const obj = context.open('pkl');
-            if (obj) {
-                format = 'NumPy Weights';
-                const weights = npz.Utility.weights(obj);
-                let separator = '_';
-                if (Array.from(weights.keys()).every((key) => key.indexOf('.') !== -1) &&
-                    !Array.from(weights.keys()).every((key) => key.indexOf('_') !== -1)) {
-                    separator = '.';
-                }
-                for (const pair of weights) {
-                    const name = pair[0];
-                    const value = pair[1];
-                    const parts = name.split(separator);
-                    const parameterName = parts.length > 1 ? parts.pop() : '?';
-                    const groupName = parts.join(separator);
-                    if (!groups.has(groupName)) {
-                        groups.set(groupName, { name: groupName, parameters: [] });
-                    }
-                    const group = groups.get(groupName);
+            const dataTypeMap = new Map([
+                [ 'i1', 'int8'], [ 'i2', 'int16' ], [ 'i4', 'int32'], [ 'i8', 'int64' ],
+                [ 'u1', 'uint8'], [ 'u2', 'uint16' ], [ 'u4', 'uint32'], [ 'u8', 'uint64' ],
+                [ 'f2', 'float16'], [ 'f4', 'float32' ], [ 'f8', 'float64']
+            ]);
+            const tensor = (name, array) => {
+                return {
+                    name: name,
+                    byteOrder: array.byteOrder,
+                    dataType: dataTypeMap.has(array.dataType) ? dataTypeMap.get(array.dataType) : array.dataType,
+                    shape: array.shape,
+                    data: array.data,
+                };
+            };
+            switch (npz.Utility.format(context)) {
+                case 'npy': {
+                    format = 'NumPy Array';
+                    const stream = context.stream;
+                    const array = new numpy.Array(stream.peek());
+                    const group = { type: format, parameters: [] };
                     group.parameters.push({
-                        name: parameterName,
+                        name: 'value',
+                        tensor: tensor('', array)
+                    });
+                    groups.set('', group);
+                    break;
+                }
+                case 'npz': {
+                    format = 'NumPy Zip';
+                    const execution = new python.Execution(null);
+                    for (const entry of context.entries('zip')) {
+                        if (!entry.name.endsWith('.npy')) {
+                            throw new npz.Error("Invalid file name '" + entry.name + "'.");
+                        }
+                        const name = entry.name.replace(/\.npy$/, '');
+                        const parts = name.split('/');
+                        const parameterName = parts.pop();
+                        const groupName = parts.join('/');
+                        if (!groups.has(groupName)) {
+                            groups.set(groupName, { name: groupName, parameters: [] });
+                        }
+                        const group = groups.get(groupName);
+                        const data = entry.data;
+                        let array = new numpy.Array(data);
+                        if (array.byteOrder === '|') {
+                            if (array.dataType !== 'O') {
+                                throw new npz.Error("Invalid data type '" + array.dataType + "'.");
+                            }
+                            const unpickler = new python.Unpickler(array.data);
+                            const root = unpickler.load((name, args) => execution.invoke(name, args));
+                            array = { dataType: root.dtype.name, shape: null, data: null, byteOrder: '|' };
+                        }
+                        group.parameters.push({
+                            name: parameterName,
+                            tensor: tensor(name, array)
+                        });
+                    }
+                    break;
+                }
+                case 'pickle': {
+                    format = 'NumPy Weights';
+                    const obj = context.open('pkl');
+                    const weights = npz.Utility.weights(obj);
+                    let separator = '_';
+                    if (Array.from(weights.keys()).every((key) => key.indexOf('.') !== -1) &&
+                        !Array.from(weights.keys()).every((key) => key.indexOf('_') !== -1)) {
+                        separator = '.';
+                    }
+                    for (const pair of weights) {
+                        const name = pair[0];
+                        const value = pair[1];
+                        const parts = name.split(separator);
+                        const parameterName = parts.length > 1 ? parts.pop() : '?';
+                        const groupName = parts.join(separator);
+                        if (!groups.has(groupName)) {
+                            groups.set(groupName, { name: groupName, parameters: [] });
+                        }
+                        const group = groups.get(groupName);
+                        group.parameters.push({
+                            name: parameterName,
+                            tensor: {
+                                name: name,
+                                byteOrder: value.dtype.byteorder,
+                                dataType: value.dtype.name,
+                                shape: value.shape,
+                                data: value.data
+                            }
+                        });
+                    }
+                    break;
+                }
+                case 'numpy.ndarray': {
+                    format = 'NumPy NDArray';
+                    const obj = context.open('pkl');
+                    const group = { type: 'numpy.ndarray', parameters: [] };
+                    group.parameters.push({
+                        name: 'data',
                         tensor: {
-                            name: name,
-                            byteOrder: value.dtype.byteorder,
-                            dataType: value.dtype.name,
-                            shape: value.shape,
-                            data: value.data
+                            name: '',
+                            byteOrder: obj.dtype.byteorder,
+                            dataType: obj.dtype.name,
+                            shape: obj.shape,
+                            data: obj.data
                         }
                     });
-                }
-            }
-            else {
-                format = 'NumPy Zip';
-                const dataTypeMap = new Map([
-                    [ 'i1', 'int8'], [ 'i2', 'int16' ], [ 'i4', 'int32'], [ 'i8', 'int64' ],
-                    [ 'u1', 'uint8'], [ 'u2', 'uint16' ], [ 'u4', 'uint32'], [ 'u8', 'uint64' ],
-                    [ 'f2', 'float16'], [ 'f4', 'float32' ], [ 'f8', 'float64']
-                ]);
-                const execution = new python.Execution(null);
-                for (const entry of context.entries('zip')) {
-                    if (!entry.name.endsWith('.npy')) {
-                        throw new npz.Error("Invalid file name '" + entry.name + "'.");
-                    }
-                    const name = entry.name.replace(/\.npy$/, '');
-                    const parts = name.split('/');
-                    const parameterName = parts.pop();
-                    const groupName = parts.join('/');
-                    if (!groups.has(groupName)) {
-                        groups.set(groupName, { name: groupName, parameters: [] });
-                    }
-                    const group = groups.get(groupName);
-                    const data = entry.data;
-                    let array = new numpy.Array(data);
-                    if (array.byteOrder === '|') {
-                        if (array.dataType !== 'O') {
-                            throw new npz.Error("Invalid data type '" + array.dataType + "'.");
-                        }
-                        const unpickler = new python.Unpickler(array.data);
-                        const root = unpickler.load((name, args) => execution.invoke(name, args));
-                        array = { dataType: root.dtype.name, shape: null, data: null, byteOrder: '|' };
-                    }
-                    group.parameters.push({
-                        name: parameterName,
-                        tensor: {
-                            name: name,
-                            byteOrder: array.byteOrder,
-                            dataType: dataTypeMap.has(array.dataType) ? dataTypeMap.get(array.dataType) : array.dataType,
-                            shape: array.shape,
-                            data: array.data,
-                        }
-                    });
+                    groups.set('', group);
+                    break;
                 }
             }
             return new npz.Model(format, groups.values());
@@ -186,7 +221,8 @@ npz.Argument = class {
 npz.Node = class {
 
     constructor(group) {
-        this._name = group.name;
+        this._name = group.name || '';
+        this._type = group.type || 'Module';
         this._inputs = [];
         for (const parameter of group.parameters) {
             const name = this._name ? [ this._name, parameter.name ].join('/') : parameter.name;
@@ -199,7 +235,7 @@ npz.Node = class {
     }
 
     get type() {
-        return 'Module';
+        return this._type;
     }
 
     get name() {
@@ -231,10 +267,6 @@ npz.Tensor = class  {
         this._shape = shape;
         this._data = data;
         this._byteOrder = byteOrder;
-    }
-
-    get kind() {
-        return 'NumPy Array';
     }
 
     get name() {
@@ -459,6 +491,28 @@ npz.TensorShape = class {
 
 npz.Utility = class {
 
+    static format(context) {
+        const stream = context.stream;
+        const signature = [ 0x93, 0x4E, 0x55, 0x4D, 0x50, 0x59 ];
+        if (signature.length <= stream.length && stream.peek(signature.length).every((value, index) => value === signature[index])) {
+            return 'npy';
+        }
+        const entries = context.entries('zip');
+        if (entries.length > 0 && entries.every((entry) => entry.name.endsWith('.npy'))) {
+            return 'npz';
+        }
+        const obj = context.open('pkl');
+        if (obj) {
+            if (npz.Utility.isTensor(obj)) {
+                return 'numpy.ndarray';
+            }
+            if (npz.Utility.weights(obj)) {
+                return 'pickle';
+            }
+        }
+        return null;
+    }
+
     static isTensor(obj) {
         return obj && obj.__class__ && obj.__class__.__module__ === 'numpy' && obj.__class__.__name__ === 'ndarray';
     }
@@ -503,7 +557,7 @@ npz.Utility = class {
                 const weights = new Map();
                 for (let i = 0; i < list.length; i++) {
                     const value = list[i];
-                    if (!npz.Utility.isTensor(value, 'numpy.ndarray')) {
+                    if (!npz.Utility.isTensor(value)) {
                         return null;
                     }
                     weights.set(i.toString(), value);
