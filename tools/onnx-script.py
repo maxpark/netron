@@ -86,9 +86,12 @@ attribute_type_table = {
     'floats': 'float32[]', 'ints': 'int64[]', 'strings': 'string[]', 'tensors': 'tensor[]', 'graphs': 'graph[]',
 }
 
-def generate_json_attr_type(type):
-    assert isinstance(type, onnx.defs.OpSchema.AttrType)
-    s = str(type)
+def generate_json_attr_type(attribute_type, attribute_name, op_type, op_domain):
+    assert isinstance(attribute_type, onnx.defs.OpSchema.AttrType)
+    key = op_domain + ':' + op_type + ':' + attribute_name
+    if key == ':Cast:to' or key == ':EyeLike:dtype' or key == ':RandomNormal:dtype':
+        return 'DataType'
+    s = str(attribute_type)
     s = s[s.rfind('.')+1:].lower()
     if s in attribute_type_table:
         return attribute_type_table[s]
@@ -138,9 +141,9 @@ def generate_json(schemas, json_file):
         json_schema = {}
         json_schema['name'] = schema.name
         if schema.domain:
-            json_schema['domain'] = schema.domain
+            json_schema['module'] = schema.domain
         else:
-            json_schema['domain'] = 'ai.onnx'
+            json_schema['module'] = 'ai.onnx'
         json_schema['version'] = schema.since_version
         json_schema['support_level'] = generate_json_support_level_name(schema.support_level)
         if schema.doc:
@@ -150,7 +153,7 @@ def generate_json(schemas, json_file):
             for _, attribute in sorted(schema.attributes.items()):
                 json_attribute = {}
                 json_attribute['name'] = attribute.name
-                attribute_type = generate_json_attr_type(attribute.type)
+                attribute_type = generate_json_attr_type(attribute.type, attribute.name, schema.name, schema.domain)
                 if attribute_type:
                     json_attribute['type'] = attribute_type
                 elif 'type' in json_attribute:
@@ -202,11 +205,18 @@ def generate_json(schemas, json_file):
                     'allowed_type_strs': type_constraint.allowed_type_strs
                 })
         if schema.name in snippets:
+            def update_code(code):
+                lines = code.splitlines()
+                while len(lines) > 0 and re.search("\\s*#", lines[-1]):
+                    lines.pop()
+                    if len(lines) > 0 and len(lines[-1]) == 0:
+                        lines.pop()
+                return '\n'.join(lines)
             json_schema['examples'] = []
             for summary, code in sorted(snippets[schema.name]):
                 json_schema['examples'].append({
                     'summary': summary,
-                    'code': code
+                    'code': update_code(code)
                 })
         if schema.name in categories:
             json_schema['category'] = categories[schema.name]
