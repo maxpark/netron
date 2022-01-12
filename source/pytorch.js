@@ -982,6 +982,7 @@ pytorch.Execution = class extends python.Execution {
         this.registerType('torch.nn.modules.activation.LeakyReLU', class {});
         this.registerType('torch.nn.modules.activation.LogSigmoid', class {});
         this.registerType('torch.nn.modules.activation.LogSoftmax', class {});
+        this.registerType('torch.nn.modules.activation.Mish', class {});
         this.registerType('torch.nn.modules.activation.MultiheadAttention', class {});
         this.registerType('torch.nn.modules.activation.ReLU', class {});
         this.registerType('torch.nn.modules.activation.ReLU6', class {});
@@ -1095,9 +1096,13 @@ pytorch.Execution = class extends python.Execution {
         this.registerType('torch.nn.qat.modules.conv.Conv2d', class {});
         this.registerType('torch.nn.qat.modules.linear.Linear', class {});
         this.registerType('torch.nn.quantized.modules.activation.ReLU', class {});
+        this.registerType('torch.nn.quantized.modules.activation.LeakyReLU', class {});
         this.registerType('torch.nn.quantized.dynamic.modules.linear.Linear', class {});
+        this.registerType('torch.nn.quantized.dynamic.modules.rnn.GRU', class {});
+        this.registerType('torch.nn.quantized.dynamic.modules.rnn.PackedParameter', class {});
         this.registerType('torch.nn.quantized.modules.activation.ReLU6', class {});
         this.registerType('torch.nn.quantized.modules.batchnorm.BatchNorm2d', class {});
+        this.registerType('torch.nn.quantized.modules.conv.Conv1d', class {});
         this.registerType('torch.nn.quantized.modules.conv.Conv2d', class {});
         this.registerType('torch.nn.quantized.modules.conv.ConvTranspose2d', class {});
         this.registerType('torch.nn.quantized.modules.DeQuantize', class {});
@@ -2042,20 +2047,26 @@ pytorch.Container = class {
         if (zip) {
             return zip;
         }
-        const stream = context.stream;
-        const signature = [ 0x80, undefined, 0x8a, 0x0a, 0x6c, 0xfc, 0x9c, 0x46, 0xf9, 0x20, 0x6a, 0xa8, 0x50, 0x19 ];
-        if (signature.length <= stream.length && stream.peek(signature.length).every((value, index) => signature[index] === undefined || signature[index] === value)) {
-            return new pytorch.Container.Pickle(stream);
+        const pickle = pytorch.Container.Pickle.open(context.stream);
+        if (pickle) {
+            return pickle;
         }
-        const entries = context.entries('tar');
-        if (entries.has('pickle')) {
-            return new pytorch.Container.Tar(entries);
+        const tar = pytorch.Container.Tar.open(context.entries('tar'));
+        if (tar) {
+            return tar;
         }
         return null;
     }
 };
 
 pytorch.Container.Tar = class {
+
+    static open(entries) {
+        if (entries.has('pickle')) {
+            return new pytorch.Container.Tar(entries);
+        }
+        return null;
+    }
 
     constructor(entries) {
         this._entries = entries;
@@ -2182,6 +2193,14 @@ pytorch.Container.Tar = class {
 };
 
 pytorch.Container.Pickle = class {
+
+    static open(stream) {
+        const signature = [ 0x80, undefined, 0x8a, 0x0a, 0x6c, 0xfc, 0x9c, 0x46, 0xf9, 0x20, 0x6a, 0xa8, 0x50, 0x19 ];
+        if (signature.length <= stream.length && stream.peek(signature.length).every((value, index) => signature[index] === undefined || signature[index] === value)) {
+            return new pytorch.Container.Pickle(stream);
+        }
+        return null;
+    }
 
     constructor(stream) {
         this._stream = stream;
