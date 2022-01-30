@@ -1,6 +1,7 @@
 
 var ncnn = ncnn || {};
 var text = text || require('./text');
+var base = base || require('./base');
 
 // https://github.com/Tencent/ncnn/wiki/param-and-model-file-structure
 // https://github.com/Tencent/ncnn/wiki/operation-param-weight-table
@@ -10,6 +11,16 @@ ncnn.ModelFactory = class {
 
     match(context) {
         const identifier = context.identifier.toLowerCase();
+        if (identifier.endsWith('.param.bin') || identifier.endsWith('.ncnnmodel')) {
+            const stream = context.stream;
+            if (stream.length > 4) {
+                const buffer = stream.peek(4);
+                const signature = (buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer [3] << 24) >>> 0;
+                if (signature == 0x007685DD) {
+                    return 'ncnn.model.bin';
+                }
+            }
+        }
         if (identifier.endsWith('.param') || identifier.endsWith('.cfg.ncnn')) {
             const reader = text.Reader.open(context.stream, 2048);
             const signature = reader.read();
@@ -20,16 +31,6 @@ ncnn.ModelFactory = class {
                 const header = signature.trim().split(' ');
                 if (header.length === 2 && header.every((value) => value >>> 0 === parseFloat(value))) {
                     return 'ncnn.model';
-                }
-            }
-        }
-        if (identifier.endsWith('.param.bin')) {
-            const stream = context.stream;
-            if (stream.length > 4) {
-                const buffer = stream.peek(4);
-                const signature = (buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer [3] << 24) >>> 0;
-                if (signature == 0x007685DD) {
-                    return 'ncnn.model.bin';
                 }
             }
         }
@@ -929,7 +930,7 @@ ncnn.TextParamReader = class {
 ncnn.BinaryParamReader = class {
 
     constructor(metadata, buffer) {
-        const reader = new ncnn.BinaryReader(buffer);
+        const reader = new base.BinaryReader(buffer);
         if (reader.int32() !== 0x007685DD) {
             throw new ncnn.Error('Invalid signature.');
         }
@@ -1063,28 +1064,6 @@ ncnn.BlobReader = class {
             return { dataType: dataType, data: data };
         }
         return null;
-    }
-};
-
-ncnn.BinaryReader = class {
-
-    constructor(buffer) {
-        this._buffer = buffer;
-        this._dataView = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-        this._position = 0;
-    }
-
-    skip(size) {
-        this._position += size;
-        if (this._position > this._buffer.length) {
-            throw new ncnn.Error('Expected ' + (this._position - this._buffer.length) + ' more bytes. The file might be corrupted. Unexpected end of file.');
-        }
-    }
-
-    int32() {
-        const position = this._position;
-        this.skip(4);
-        return this._dataView.getInt32(position, true);
     }
 };
 

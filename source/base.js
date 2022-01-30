@@ -554,6 +554,111 @@ DataView.prototype.getBits = DataView.prototype.getBits || function(offset, bits
     return value;
 };
 
+base.BinaryReader = class {
+
+    constructor(data) {
+        this._buffer = data instanceof Uint8Array ? data : data.peek();
+        this._position = 0;
+        this._length = this._buffer.length;
+        this._view = new DataView(this._buffer.buffer, this._buffer.byteOffset, this._buffer.byteLength);
+        this._utf8 = new TextDecoder('utf-8');
+    }
+
+    get length() {
+        return this._length;
+    }
+
+    get position() {
+        return this._position;
+    }
+
+    seek(position) {
+        this._position = position >= 0 ? position : this._length + position;
+        if (this._position > this._length || this._position < 0) {
+            throw new Error('Expected ' + (this._position - this._length) + ' more bytes. The file might be corrupted. Unexpected end of file.');
+        }
+    }
+
+    skip(offset) {
+        this._position += offset;
+        if (this._position > this._length) {
+            throw new Error('Expected ' + (this._position - this._length) + ' more bytes. The file might be corrupted. Unexpected end of file.');
+        }
+    }
+
+    read(length) {
+        if (this._position === 0 && length === undefined) {
+            this._position = this._length;
+            return this._buffer;
+        }
+        const position = this._position;
+        this.skip(length !== undefined ? length : this._length - this._position);
+        return this._buffer.slice(position, this._position);
+    }
+
+    byte() {
+        const position = this._position;
+        this.skip(1);
+        return this._buffer[position];
+    }
+
+    int16() {
+        const position = this._position;
+        this.skip(2);
+        return this._view.getInt16(position, true);
+    }
+
+    int32() {
+        const position = this._position;
+        this.skip(4);
+        return this._view.getInt32(position, true);
+    }
+
+    int64() {
+        const position = this._position;
+        this.skip(8);
+        return this._view.getInt64(position, true).toNumber();
+    }
+
+    uint16() {
+        const position = this._position;
+        this.skip(2);
+        return this._view.getUint16(position, true);
+    }
+
+    uint32() {
+        const position = this._position;
+        this.skip(4);
+        return this._view.getUint32(position, true);
+    }
+
+    uint64() {
+        const position = this._position;
+        this.skip(8);
+        return this._view.getUint64(position, true).toNumber();
+    }
+
+    float32() {
+        const position = this._position;
+        this.skip(4);
+        return this._view.getFloat32(position, true);
+    }
+
+    float64() {
+        const position = this._position;
+        this.skip(8);
+        return this._view.getFloat64(position, true);
+    }
+
+    string() {
+        const length = this.uint32();
+        const position = this._position;
+        this.skip(length);
+        const data = this._buffer.subarray(position, this._position);
+        return this._utf8.decode(data);
+    }
+};
+
 if (typeof window !== 'undefined' && typeof window.Long != 'undefined') {
     window.long = { Long: window.Long };
     window.Int64 = base.Int64;
@@ -563,4 +668,5 @@ if (typeof window !== 'undefined' && typeof window.Long != 'undefined') {
 if (typeof module !== 'undefined' && typeof module.exports === 'object') {
     module.exports.Int64 = base.Int64;
     module.exports.Uint64 = base.Uint64;
+    module.exports.BinaryReader = base.BinaryReader;
 }

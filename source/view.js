@@ -1519,7 +1519,7 @@ view.ModelFactoryService = class {
         this.register('./tf', [ '.pb', '.meta', '.pbtxt', '.prototxt', '.pt', '.json', '.index', '.ckpt', '.graphdef', '.pbmm', /.data-[0-9][0-9][0-9][0-9][0-9]-of-[0-9][0-9][0-9][0-9][0-9]$/, /^events.out.tfevents./ ]);
         this.register('./mediapipe', [ '.pbtxt' ]);
         this.register('./uff', [ '.uff', '.pb', '.pbtxt', '.uff.txt', '.trt', '.engine' ]);
-        this.register('./tensorrt', [ '.trt', '.engine', '.model', '.txt', '.uff', '.pb', '.tmfile', '.onnx', '.pth', '.dnn' ]);
+        this.register('./tensorrt', [ '.trt', '.engine', '.model', '.txt', '.uff', '.pb', '.tmfile', '.onnx', '.pth', '.dnn', '.plan' ]);
         this.register('./numpy', [ '.npz', '.npy', '.pkl', '.pickle' ]);
         this.register('./lasagne', [ '.pkl', '.pickle', '.joblib', '.model', '.pkl.z', '.joblib.z' ]);
         this.register('./lightgbm', [ '.txt', '.pkl', '.model' ]);
@@ -1535,13 +1535,14 @@ view.ModelFactoryService = class {
         this.register('./dlc', [ '.dlc' ]);
         this.register('./armnn', [ '.armnn', '.json' ]);
         this.register('./mnn', ['.mnn']);
-        this.register('./ncnn', [ '.param', '.bin', '.cfg.ncnn', '.weights.ncnn' ]);
+        this.register('./ncnn', [ '.param', '.bin', '.cfg.ncnn', '.weights.ncnn', '.ncnnmodel' ]);
         this.register('./tnn', [ '.tnnproto', '.tnnmodel' ]);
         this.register('./tengine', ['.tmfile']);
         this.register('./mslite', [ '.ms']);
         this.register('./barracuda', [ '.nn' ]);
         this.register('./dnn', [ '.dnn' ]);
         this.register('./xmodel', [ '.xmodel' ]);
+        this.register('./kmodel', [ '.kmodel' ]);
         this.register('./flux', [ '.bson' ]);
         this.register('./dl4j', [ '.json', '.bin' ]);
         this.register('./openvino', [ '.xml', '.bin' ]);
