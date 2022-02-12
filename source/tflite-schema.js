@@ -18,7 +18,8 @@ $root.tflite.TensorType = {
     UINT64: 12,
     RESOURCE: 13,
     VARIANT: 14,
-    UINT32: 15
+    UINT32: 15,
+    UINT16: 16
 };
 
 $root.tflite.CustomQuantization = class CustomQuantization {
@@ -369,7 +370,8 @@ $root.tflite.BuiltinOperator = {
     BUCKETIZE: 147,
     RANDOM_UNIFORM: 148,
     MULTINOMIAL: 149,
-    GELU: 150
+    GELU: 150,
+    DYNAMIC_UPDATE_SLICE: 151
 };
 
 $root.tflite.BuiltinOptions = class {
@@ -492,6 +494,7 @@ $root.tflite.BuiltinOptions = class {
             case 114: return $root.tflite.RandomOptions.decode(reader, position);
             case 115: return $root.tflite.BucketizeOptions.decode(reader, position);
             case 116: return $root.tflite.GeluOptions.decode(reader, position);
+            case 117: return $root.tflite.DynamicUpdateSliceOptions.decode(reader, position);
         }
         return undefined;
     }
@@ -614,6 +617,7 @@ $root.tflite.BuiltinOptions = class {
             case 'RandomOptions': return $root.tflite.RandomOptions.decodeText(reader, json);
             case 'BucketizeOptions': return $root.tflite.BucketizeOptions.decodeText(reader, json);
             case 'GeluOptions': return $root.tflite.GeluOptions.decodeText(reader, json);
+            case 'DynamicUpdateSliceOptions': return $root.tflite.DynamicUpdateSliceOptions.decodeText(reader, json);
         }
         return undefined;
     }
@@ -2452,6 +2456,19 @@ $root.tflite.GeluOptions = class GeluOptions {
     static decodeText(reader, json) {
         const $ = new $root.tflite.GeluOptions();
         $.approximate = reader.value(json.approximate, false);
+        return $;
+    }
+};
+
+$root.tflite.DynamicUpdateSliceOptions = class DynamicUpdateSliceOptions {
+
+    static decode(/* reader, position */) {
+        const $ = new $root.tflite.DynamicUpdateSliceOptions();
+        return $;
+    }
+
+    static decodeText(/* reader, json */) {
+        const $ = new $root.tflite.DynamicUpdateSliceOptions();
         return $;
     }
 };
