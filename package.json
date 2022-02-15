@@ -17,13 +17,13 @@
         "server": "node ./publish/server.js"
     },
     "dependencies": {
-        "electron-updater": "4.6.1"
+        "electron-updater": "4.6.5"
     },
     "devDependencies": {
         "electron": "17.0.0",
-        "electron-builder": "22.14.5",
+        "electron-builder": "22.14.13",
         "electron-notarize": "1.1.1",
-        "eslint": "8.8.0"
+        "eslint": "8.9.0"
     },
     "eslintConfig": {
         "env": {
@@ -63,6 +63,7 @@
             { "ext": "hd5",        "name": "Keras Model"           },
             { "ext": "hdf5",       "name": "Keras Model"           },
             { "ext": "keras",      "name": "Keras Model"           },
+            { "ext": "kmodel",     "name": "kmodel"                },
             { "ext": "lite",       "name": "TensorFlow Lite Model" },
             { "ext": "mar",        "name": "MXNet Model"           },
             { "ext": "meta",       "name": "TensorFlow Meta Graph" },
