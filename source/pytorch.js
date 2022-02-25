@@ -999,6 +999,7 @@ pytorch.Execution = class extends python.Execution {
         this.registerType('torch.nn.modules.activation.Softmax2d', class {});
         this.registerType('torch.nn.modules.activation.Softplus', class {});
         this.registerType('torch.nn.modules.activation.Tanh', class {});
+        this.registerType('torch.nn.modules.activation.Tanhshrink', class {});
         this.registerType('torch.nn.modules.activation.Threshold', class {});
         this.registerType('torch.nn.modules.batchnorm.BatchNorm1d', class {});
         this.registerType('torch.nn.modules.batchnorm.BatchNorm2d', class {});
@@ -3150,6 +3151,7 @@ pytorch.Container.Zip.Execution = class extends pytorch.Execution {
                                     case 'torch.unbind':
                                         count = args[0].__tuple__ || count;
                                         break;
+                                    case 'torch.broadcast_tensors':
                                     case 'torch.split':
                                         if (context.target.length > 0) {
                                             count = context.target[context.target.length - 1].length;
