@@ -37,7 +37,7 @@ tnn.ModelFactory = class {
     }
 
     open(context, match) {
-        return tnn.Metadata.open(context).then((metadata) => {
+        return context.metadata('tnn-metadata.json').then((metadata) => {
             switch (match) {
                 case 'tnn.model': {
                     const tnnmodel = context.identifier.substring(0, context.identifier.length - 9) + '.tnnmodel';
@@ -54,6 +54,9 @@ tnn.ModelFactory = class {
                         const buffer = stream.peek();
                         return new tnn.Model(metadata, buffer, context.stream.peek());
                     });
+                }
+                default: {
+                    throw new tnn.Error("Unsupported TNN format '" + match + "'.");
                 }
             }
         });
@@ -165,12 +168,7 @@ tnn.Node = class {
         this._outputs = [];
         this._attributes = [];
         this._name = layer.name;
-        let type = layer.type;
-        const operator = metadata.operator(type);
-        if (operator) {
-            type = operator;
-        }
-        this._type = metadata.type(type) || { name: type };
+        this._type = metadata.type(layer.type);
         const attributeSchemas = this._type && this._type.attributes ? this._type && this._type.attributes.slice() : [];
         const attributes = layer.attributes.slice();
         while (attributes.length > 0) {
@@ -230,7 +228,7 @@ tnn.Node = class {
                 return new tnn.Parameter(outputName, [ new tnn.Argument(output, null, null) ]);
             }));
         }
-        switch (type) {
+        switch (this._type.name) {
             case 'Convolution':
             case 'ConvolutionDepthWise':
             case 'Deconvolution':
@@ -343,6 +341,9 @@ tnn.Node = class {
                 }
                 break;
             }
+            default: {
+                break;
+            }
         }
     }
 
@@ -388,15 +389,22 @@ tnn.Attribute = class {
                 this._type = schema.type;
             }
             switch (this._type) {
+                case '':
+                    break;
                 case 'int32':
                     this._value = parseInt(this._value, 10);
                     break;
                 case 'float32':
                     this._value = parseFloat(this._value);
                     break;
+                case 'int32[]':
+                    this._value = this._value.map((v) => parseInt(v, 10));
+                    break;
                 case 'float32[]':
                     this._value = this._value.map((v) => parseFloat(v));
                     break;
+                default:
+                    throw new tnn.Error("Unsupported attribute type '" + this._type + "'.");
             }
             if (Object.prototype.hasOwnProperty.call(schema, 'visible') && !schema.visible) {
                 this._visible = false;
@@ -520,6 +528,8 @@ tnn.Tensor = class {
                         context.index += 2;
                         context.count++;
                         break;
+                    default:
+                        throw new tnn.Error("Unsupported tensor data type '" + this._type.dataType + "'.");
                 }
             }
         }
@@ -571,57 +581,6 @@ tnn.TensorShape = class {
 
     toString() {
         return this._dimensions ? ('[' + this._dimensions.map((dimension) => dimension ? dimension.toString() : '?').join(',') + ']') : '';
-    }
-};
-
-tnn.Metadata = class {
-
-    static open(context) {
-        if (tnn.Metadata._metadata) {
-            return Promise.resolve(tnn.Metadata._metadata);
-        }
-        return context.request('tnn-metadata.json', 'utf-8', null).then((data) => {
-            tnn.Metadata._metadata = new tnn.Metadata(data);
-            return tnn.Metadata._metadata;
-        }).catch(() => {
-            tnn.Metadata._metadata = new tnn.Metadata(null);
-            return tnn.Metadata._metadatas;
-        });
-    }
-
-    constructor(data) {
-        this._operatorMap = new Map();
-        this._map = new Map();
-        this._attributeCache = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._map = new Map(metadata.map((item) => [ item.name, item ]));
-            this._operatorMap = new Map(metadata.map((item) => [ item.operator, item ]));
-        }
-    }
-
-    operator(code) {
-        return this._operatorMap.get(code);
-    }
-
-    type(operator) {
-        return this._map.get(operator);
-    }
-
-    attribute(operator, name) {
-        const key = operator + ':' + name;
-        if (!this._attributeCache.has(key)) {
-            const schema = this.type(operator);
-            if (schema && schema.attributes && schema.attributes.length > 0) {
-                for (const attribute of schema.attributes) {
-                    this._attributeCache.set(operator + ':' + attribute.name, attribute);
-                }
-            }
-            if (!this._attributeCache.has(key)) {
-                this._attributeCache.set(key, null);
-            }
-        }
-        return this._attributeCache.get(key);
     }
 };
 
@@ -740,7 +699,7 @@ tnn.LayerResourceReader = class {
                 }
                 const data_type = reader.int32();
                 if (data_type > 4) {
-                    throw new tnn.Error("Unknown data type '" + data_type + "'.");
+                    throw new tnn.Error("Unsupported data type '" + data_type + "'.");
                 }
                 const length = reader.int32();
                 if (length <= 0) {
@@ -846,7 +805,7 @@ tnn.LayerResourceReader = class {
                         break;
                     }
                     default:
-                        throw new tnn.Error("Unknown layer resource type '" + resource.type + "'.");
+                        throw new tnn.Error("Unsupported layer resource type '" + resource.type + "'.");
                 }
                 this._layerResources.push(resource);
             }

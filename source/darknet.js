@@ -40,7 +40,7 @@ darknet.ModelFactory = class {
     }
 
     open(context, match) {
-        return darknet.Metadata.open(context).then((metadata) => {
+        return context.metadata('darknet-metadata.json').then((metadata) => {
             const openModel = (metadata, cfg, weights) => {
                 return new darknet.Model(metadata, cfg, darknet.Weights.open(weights));
             };
@@ -61,7 +61,7 @@ darknet.ModelFactory = class {
                         return openModel(metadata, context.stream.peek(), null);
                     });
                 default: {
-                    throw new darknet.Error("Unknown Darknet format '" + match + "'.");
+                    throw new darknet.Error("Unsupported Darknet format '" + match + "'.");
                 }
             }
         });
@@ -314,6 +314,8 @@ darknet.Graph = class {
                     }
                     break;
                 }
+                default:
+                    break;
             }
             if (infer) {
                 switch (section.type) {
@@ -599,7 +601,7 @@ darknet.Graph = class {
                             layer.vi = { weights: [], outputs: [ new darknet.Argument('', null, null) ], chain: [] };
                             make_convolutional_layer(layer.vi, 'vi_', params.h, params.w, output_filters, output_filters, groups, size, stride, stride, padding, batch_normalize);
                             layer.vo = { weights: [], outputs: [ new darknet.Argument('', null, null) ], chain: [] };
-                            make_convolutional_layer(layer.wo, 'vo_', params.h, params.w, output_filters, output_filters, groups, size, stride, stride, padding, batch_normalize);
+                            make_convolutional_layer(layer.vo, 'vo_', params.h, params.w, output_filters, output_filters, groups, size, stride, stride, padding, batch_normalize);
                             layer.weights = layer.weights.concat(layer.vf.weights);
                             layer.weights = layer.weights.concat(layer.vi.weights);
                             layer.weights = layer.weights.concat(layer.vo.weights);
@@ -944,6 +946,10 @@ darknet.Attribute = class {
         if (schema) {
             this._type = schema.type || '';
             switch (this._type) {
+                case '':
+                case 'string': {
+                    break;
+                }
                 case 'int32': {
                     const number = parseInt(this._value, 10);
                     if (Number.isInteger(number)) {
@@ -964,6 +970,9 @@ darknet.Attribute = class {
                         this._value = numbers;
                     }
                     break;
+                }
+                default: {
+                    throw new darknet.Error("Unsupported attribute type '" + this._type + "'.");
                 }
             }
             if (Object.prototype.hasOwnProperty.call(schema, 'visible') && !schema.visible) {
@@ -1151,49 +1160,6 @@ darknet.Weights = class {
         if (this._stream.position != this._stream.length) {
             throw new darknet.Error('Invalid weights size.');
         }
-    }
-};
-
-darknet.Metadata = class {
-
-    static open(context) {
-        if (darknet.Metadata._metadata) {
-            return Promise.resolve(darknet.Metadata._metadata);
-        }
-        return context.request('darknet-metadata.json', 'utf-8', null).then((data) => {
-            darknet.Metadata._metadata = new darknet.Metadata(data);
-            return darknet.Metadata._metadata;
-        }).catch(() => {
-            darknet.Metadata._metadata = new darknet.Metadata(null);
-            return darknet.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._map = new Map();
-        this._attributeMap = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._map = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        return this._map.get(name) || null;
-    }
-
-    attribute(type, name) {
-        const key = type + ':' + name;
-        if (!this._attributeMap.has(key)) {
-            this._attributeMap.set(key, null);
-            const schema = this.type(type);
-            if (schema && schema.attributes) {
-                for (const attribute of schema.attributes) {
-                    this._attributeMap.set(type + ':' + attribute.name, attribute);
-                }
-            }
-        }
-        return this._attributeMap.get(key);
     }
 };
 

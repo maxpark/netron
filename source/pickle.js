@@ -26,15 +26,15 @@ pickle.ModelFactory = class {
             let format = 'Pickle';
             const obj = context.open('pkl');
             if (obj === null || obj === undefined) {
-                context.exception(new pickle.Error("Unknown Pickle null object in '" + context.identifier + "'."));
+                context.exception(new pickle.Error("Unsupported Pickle null object in '" + context.identifier + "'."));
             }
             else if (Array.isArray(obj)) {
                 if (obj.length > 0 && obj[0] && obj.every((item) => item && item.__class__ && obj[0].__class__ && item.__class__.__module__ === obj[0].__class__.__module__ && item.__class__.__name__ === obj[0].__class__.__name__)) {
                     const type = obj[0].__class__.__module__ + "." + obj[0].__class__.__name__;
-                    context.exception(new pickle.Error("Unknown Pickle '" + type + "' array object in '" + context.identifier + "'."));
+                    context.exception(new pickle.Error("Unsupported Pickle '" + type + "' array object in '" + context.identifier + "'."));
                 }
                 else {
-                    context.exception(new pickle.Error("Unknown Pickle array object in '" + context.identifier + "'."));
+                    context.exception(new pickle.Error("Unsupported Pickle array object in '" + context.identifier + "'."));
                 }
             }
             else if (obj && obj.__class__) {
@@ -46,11 +46,11 @@ pickle.ModelFactory = class {
                     format = formats.get(type);
                 }
                 else {
-                    context.exception(new pickle.Error("Unknown Pickle type '" + type +  "' in '" + context.identifier + "'."));
+                    context.exception(new pickle.Error("Unsupported Pickle type '" + type +  "' in '" + context.identifier + "'."));
                 }
             }
             else {
-                context.exception(new pickle.Error("Unknown Pickle object in '" + context.identifier + "'."));
+                context.exception(new pickle.Error("Unsupported Pickle object in '" + context.identifier + "'."));
             }
             resolve(new pickle.Model(obj, format));
         });
@@ -125,9 +125,10 @@ pickle.Node = class {
         else {
             const type = obj.__class__ ? obj.__class__.__module__ + '.' + obj.__class__.__name__ : 'Object';
             this._type = { name: type };
-            for (const key of Object.keys(obj)) {
-                const value = obj[key];
-                this._attributes.push(new pickle.Attribute(key, value));
+            for (const entry of Object.entries(obj)) {
+                const name = entry[0];
+                const value = entry[1];
+                this._attributes.push(new pickle.Attribute(name, value));
             }
         }
     }

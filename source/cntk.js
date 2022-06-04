@@ -23,7 +23,7 @@ cntk.ModelFactory = class {
     }
 
     open(context, match) {
-        return cntk.Metadata.open(context).then((metadata) => {
+        return context.metadata('cntk-metadata.json').then((metadata) => {
             switch (match) {
                 case 'cntk.v1': {
                     let obj = null;
@@ -57,7 +57,7 @@ cntk.ModelFactory = class {
                     });
                 }
                 default: {
-                    throw new cntk.Error("Unknown CNTK format '" + match + "'.");
+                    throw new cntk.Error("Unsupported CNTK format '" + match + "'.");
                 }
             }
         });
@@ -95,8 +95,9 @@ cntk.ModelFactory = class {
                 return cntk.ModelFactory._convertDictionary(dictionaryValue.dictionary_value);
             case cntk_v2.DictionaryValue.Type.NDArrayView:
                 return dictionaryValue.nd_array_view_value;
+            default:
+                throw new cntk.Error("Unsupported dictionary value type '" + dictionaryValue.value_type.toString() + "'.");
         }
-        throw new cntk.Error("Unknown dictionary value type '" + dictionaryValue.value_type.toString() + "'.");
     }
 
     static _convertVectorValue(vectorValue) {
@@ -116,6 +117,8 @@ cntk.Model = class {
             case 2:
                 this._format = 'CNTK v2';
                 break;
+            default:
+                throw new cntk.Error("Unsupported CNTK version '" + version + "'.");
         }
         this._graphs = [];
         this._graphs.push(new cntk.Graph(metadata, version, obj));
@@ -150,6 +153,8 @@ cntk.Graph = class {
                     case 2:
                         args.set(name, new cntk.Argument(version, obj ? obj : { uid: name }));
                         break;
+                    default:
+                        throw new cntk.Error("Unsupported CNTK version '" + version + "'.");
                 }
             }
             return args.get(name);
@@ -166,6 +171,8 @@ cntk.Graph = class {
                             break;
                         case 'LearnableParameter':
                             arg(node.name, version, node);
+                            break;
+                        default:
                             break;
                     }
                 }
@@ -307,6 +314,8 @@ cntk.Argument = class {
                     this._initializer = null;
                 }
                 break;
+            default:
+                throw new cntk.Error("Unsupported CNTK version '" + version + "'.");
         }
     }
 
@@ -364,7 +373,8 @@ cntk.Node = class {
                     this._type = metadata.type(obj.uid) || { name: obj.uid };
                 }
                 else if (Object.prototype.hasOwnProperty.call(obj, 'op')) {
-                    this._type = metadata.name(obj.op.toNumber()) || { name: obj.op ? obj.op.toString() : '?' };
+                    // cntk/Source/CNTKv2LibraryDll/API/Internals/PrimitiveOpType.h
+                    this._type = metadata.type(obj.op.toNumber());
                 }
                 else {
                     const type = obj.type;
@@ -383,6 +393,9 @@ cntk.Node = class {
                 inputs = obj.inputs.map((input) => arg(input, version));
                 outputs.push(arg(output + '_Output_0', version));
                 break;
+            }
+            default: {
+                throw new cntk.Error("Unsupported CNTK version '" + version + "'.");
             }
         }
         let inputIndex = 0;
@@ -533,6 +546,8 @@ cntk.Tensor = class {
                 this._type = new cntk.TensorType(version, tensor.data_type, tensor.shape);
                 this._value = tensor.value;
                 break;
+            default:
+                throw new cntk.Error("Unsupported CNTK version '" + version + "'.");
         }
     }
 
@@ -652,6 +667,7 @@ cntk.TensorType = class {
                     case 'double': this._dataType = 'float64'; break;
                     case 'half': this._dataType = 'float16'; break;
                     case '': this._dataType = 'float32'; break;
+                    default: throw new cntk.Error("Unsupported tensor data type '" + dataType + "'.");
                 }
                 this._shape = new cntk.TensorShape(version, shape);
                 break;
@@ -659,9 +675,12 @@ cntk.TensorType = class {
                 dataType = dataType.toNumber();
                 switch (dataType) {
                     case 1: this._dataType = 'float32'; break;
+                    default: throw new cntk.Error("Unsupported tensor data type '" + dataType + "'.");
                 }
                 this._shape = new cntk.TensorShape(version, shape);
                 break;
+            default:
+                throw new cntk.Error("Unsupported CNTK version '" + version + "'.");
         }
     }
 
@@ -688,6 +707,8 @@ cntk.TensorShape = class {
             case 2:
                 this._dimensions = shape.shape_dim.map((dimension) => dimension.toNumber());
                 break;
+            default:
+                throw new cntk.Error("Unsupported CNTK version '" + version + "'.");
         }
     }
 
@@ -736,8 +757,9 @@ cntk.Function = class {
             case 'AveragePooling':
             case 'MaxPooling':
                 return 'Pool';
+            default:
+                return null;
         }
-        return null;
     }
 
     get description() {
@@ -798,41 +820,6 @@ cntk.GraphMetadata = class {
             }
         }
         return this._attributes.get(key);
-    }
-};
-
-cntk.Metadata = class {
-
-    static open(context) {
-        if (cntk.Metadata._metadata) {
-            return Promise.resolve(cntk.Metadata._metadata);
-        }
-        return context.request('cntk-metadata.json', 'utf-8', null).then((data) => {
-            cntk.Metadata._metadata = new cntk.Metadata(data);
-            return cntk.Metadata._metadata;
-        }).catch(() => {
-            cntk.Metadata._metadata = new cntk.Metadata(null);
-            return cntk.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._map = new Map();
-        this._typeMap = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._types = new Map(metadata.map((item) => [ item.name, item ]));
-            this._codes = new Map(metadata.map((item) => [ item.operator, item ]));
-        }
-    }
-
-    name(code) {
-        // cntk/Source/CNTKv2LibraryDll/API/Internals/PrimitiveOpType.h
-        return this._codes.get(code);
-    }
-
-    type(name) {
-        return this._types.get(name);
     }
 };
 
@@ -1137,7 +1124,7 @@ cntk_v1.ComputationNetwork = class {
             obj.precision = precision;
             const constructor = op[obj.__type__];
             if (!constructor) {
-                throw new cntk.Error("Unknown node type '" + obj.__type__ + "'.");
+                throw new cntk.Error("Unsupported node type '" + obj.__type__ + "'.");
             }
             constructor.apply(obj, [ reader, this.version ]);
             nodes.push(obj);

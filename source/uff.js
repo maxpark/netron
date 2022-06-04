@@ -57,8 +57,11 @@ uff.ModelFactory = class {
                     }
                     break;
                 }
+                default: {
+                    throw new uff.Error("Unsupported UFF format '" + match + "'.");
+                }
             }
-            return uff.Metadata.open(context).then((metadata) => {
+            return context.metadata('uff-metadata.json').then((metadata) => {
                 return new uff.Model(metadata, meta_graph);
             });
         });
@@ -105,10 +108,10 @@ uff.Graph = class {
         this._nodes = [];
 
         const args = new Map();
-        const inputCountMap = new Map();
+        const counts = new Map();
         for (const node of graph.nodes) {
             for (const input of node.inputs) {
-                inputCountMap.set(input, inputCountMap.has(input) ? inputCountMap.get(input) + 1 : 1);
+                counts.set(input, counts.has(input) ? counts.get(input) + 1 : 1);
                 args.set(input, new uff.Argument(input));
             }
             if (!args.has(node.id)) {
@@ -117,7 +120,7 @@ uff.Graph = class {
         }
         for (let i = graph.nodes.length - 1; i >= 0; i--) {
             const node = graph.nodes[i];
-            if (node.operation === 'Const' && node.inputs.length === 0 && inputCountMap.get(node.id) === 1) {
+            if (node.operation === 'Const' && node.inputs.length === 0 && counts.get(node.id) === 1) {
                 const fields = {};
                 for (const field of node.fields) {
                     fields[field.key] = field.value;
@@ -290,7 +293,7 @@ uff.Attribute = class {
             case 'dtype_list': this._value = value.dtype_list.map((type) => new uff.TensorType(type, null).dataType); this._type = 'uff.DataType[]'; break;
             case 'dim_orders': this._value = value.dim_orders; break;
             case 'dim_orders_list': this._value = value.dim_orders_list.val; break;
-            default: throw new uff.Error("Unknown attribute '" + name + "' value '" + JSON.stringify(value) + "'.");
+            default: throw new uff.Error("Unsupported attribute '" + name + "' value '" + JSON.stringify(value) + "'.");
         }
     }
 
@@ -317,7 +320,7 @@ uff.Tensor = class {
         this._type = new uff.TensorType(dataType, shape);
         switch (values.type) {
             case 'blob': this._data = values.blob; break;
-            default: throw new uff.Error("Unknown values format '" + JSON.stringify(values.type) + "'.");
+            default: throw new uff.Error("Unsupported values format '" + JSON.stringify(values.type) + "'.");
         }
     }
 
@@ -452,8 +455,7 @@ uff.TensorType = class {
             case uff.proto.DataType.DT_FLOAT16: this._dataType = 'float16'; break;
             case uff.proto.DataType.DT_FLOAT32: this._dataType = 'float32'; break;
             case 7: this._dataType = '?'; break;
-            default:
-                throw new uff.Error("Unknown data type '" + JSON.stringify(dataType) + "'.");
+            default: throw new uff.Error("Unsupported data type '" + JSON.stringify(dataType) + "'.");
         }
         this._shape = shape ? new uff.TensorShape(shape) : null;
     }
@@ -475,7 +477,7 @@ uff.TensorShape = class {
 
     constructor(shape) {
         if (shape.type !== 'i_list') {
-            throw new uff.Error("Unknown shape format '" + JSON.stringify(shape.type) + "'.");
+            throw new uff.Error("Unsupported shape format '" + JSON.stringify(shape.type) + "'.");
         }
         this._dimensions = shape.i_list.val;
     }
@@ -489,49 +491,6 @@ uff.TensorShape = class {
             return '';
         }
         return '[' + this._dimensions.join(',') + ']';
-    }
-};
-
-uff.Metadata = class {
-
-    static open(context) {
-        if (uff.Metadata._metadata) {
-            return Promise.resolve(uff.Metadata._metadata);
-        }
-        return context.request('uff-metadata.json', 'utf-8', null).then((data) => {
-            uff.Metadata._metadata = new uff.Metadata(data);
-            return uff.Metadata._metadata;
-        }).catch(() => {
-            uff.Metadata._metadata = new uff.Metadata(null);
-            return uff.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._types = new Map();
-        this._attributes = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._types = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        return this._types.get(name);
-    }
-
-    attribute(type, name) {
-        const key = type + ':' + name;
-        if (!this._attributes.has(key)) {
-            this._attributes.set(key, null);
-            const metadata = this.type(type);
-            if (metadata && Array.isArray(metadata.attributes)) {
-                for (const attribute of metadata.attributes) {
-                    this._attributes.set(type + ':' + attribute.name, attribute);
-                }
-            }
-        }
-        return this._attributes.get(key);
     }
 };
 

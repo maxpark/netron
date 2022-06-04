@@ -7,27 +7,35 @@ sklearn.ModelFactory = class {
 
     match(context) {
         const obj = context.open('pkl');
-        const validate = (obj) => {
+        const validate = (obj, name) => {
             if (obj && obj.__class__ && obj.__class__.__module__ && obj.__class__.__name__) {
                 const key = obj.__class__.__module__ + '.' + obj.__class__.__name__;
-                return key.startsWith('sklearn.') || key.startsWith('xgboost.sklearn.') || key.startsWith('lightgbm.sklearn.');
+                return key.startsWith(name);
             }
             return false;
         };
-        if (validate(obj)) {
-            return 'sklearn';
-        }
-        if (Array.isArray(obj) && obj.every((item) => validate(item))) {
-            return 'sklearn.list';
-        }
-        if ((Object(obj) === obj) && Object.entries(obj).every((entry) => validate(entry[1]))) {
-            return 'sklearn.map';
+        const formats = [
+            { name: 'sklearn.', format: 'sklearn' },
+            { name: 'xgboost.sklearn.', format: 'sklearn' },
+            { name: 'lightgbm.sklearn.', format: 'sklearn' },
+            { name: 'scipy.', format: 'scipy' }
+        ];
+        for (const format of formats) {
+            if (validate(obj, format.name)) {
+                return format.format;
+            }
+            if (Array.isArray(obj) && obj.every((item) => validate(item, format.name))) {
+                return format.format + '.list';
+            }
+            if ((Object(obj) === obj) && Object.entries(obj).every((entry) => validate(entry[1], format.name))) {
+                return format.format + '.map';
+            }
         }
         return undefined;
     }
 
     open(context, match) {
-        return sklearn.Metadata.open(context).then((metadata) => {
+        return context.metadata('sklearn-metadata.json').then((metadata) => {
             const obj = context.open('pkl');
             return new sklearn.Model(metadata, match, obj);
         });
@@ -37,16 +45,19 @@ sklearn.ModelFactory = class {
 sklearn.Model = class {
 
     constructor(metadata, match, obj) {
-        this._format = 'scikit-learn';
+        const formats = new Map([ [ 'sklearn', 'scikit-learn' ], [ 'scipy', 'SciPy' ] ]);
+        this._format = formats.get(match.split('.').shift());
         this._graphs = [];
         const version = [];
         switch (match) {
-            case 'sklearn': {
+            case 'sklearn':
+            case 'scipy': {
                 version.push(obj._sklearn_version ? ' v' + obj._sklearn_version.toString() : '');
                 this._graphs.push(new sklearn.Graph(metadata, '', obj));
                 break;
             }
-            case 'sklearn.list': {
+            case 'sklearn.list':
+            case 'scipy.list': {
                 const list = obj;
                 for (let i = 0; i < list.length; i++) {
                     const obj = list[i];
@@ -55,13 +66,17 @@ sklearn.Model = class {
                 }
                 break;
             }
-            case 'sklearn.map': {
+            case 'sklearn.map':
+            case 'scipy.map': {
                 for (const entry of Object.entries(obj)) {
                     const obj = entry[1];
                     this._graphs.push(new sklearn.Graph(metadata, entry[0], obj));
                     version.push(obj._sklearn_version ? ' v' + obj._sklearn_version.toString() : '');
                 }
                 break;
+            }
+            default: {
+                throw new sklearn.Error("Unsupported scikit-learn format '" + match + "'.");
             }
         }
         if (version.every((value) => value === version[0])) {
@@ -230,7 +245,8 @@ sklearn.Node = class {
                 this._inputs.push(paramter);
             }
             else if (!name.startsWith('_')) {
-                this._attributes.push(new sklearn.Attribute(metadata.attribute(this._type, name), name, value));
+                const attribute = new sklearn.Attribute(metadata.attribute(type, name), name, value);
+                this._attributes.push(attribute);
             }
         }
     }
@@ -266,15 +282,23 @@ sklearn.Attribute = class {
         this._name = name;
         this._value = value;
         if (metadata) {
-            if (metadata.option === 'optional' && this._value == null) {
+            if (metadata.optional && this._value == null) {
                 this._visible = false;
             }
             else if (metadata.visible === false) {
                 this._visible = false;
             }
-            else if (Object.prototype.hasOwnProperty.call(metadata, 'default')) {
-                if (sklearn.Attribute._isEquivalent(metadata.default, this._value)) {
-                    this._visible = false;
+            else if (metadata.default !== undefined) {
+                if (Array.isArray(value)) {
+                    if (Array.isArray(metadata.default)) {
+                        this._visible = value.length !== metadata.default || !this.value.every((item, index) => item == metadata.default[index]);
+                    }
+                    else {
+                        this._visible = !this.value.every((item) => item == metadata.default);
+                    }
+                }
+                else {
+                    this._visible = this.value !== metadata.default;
                 }
             }
         }
@@ -303,66 +327,6 @@ sklearn.Attribute = class {
     get visible() {
         return this._visible == false ? false : true;
     }
-
-    static _isEquivalent(a, b) {
-        if (a === b) {
-            return a !== 0 || 1 / a === 1 / b;
-        }
-        if (a == null || b == null) {
-            return false;
-        }
-        if (a !== a) {
-            return b !== b;
-        }
-        const type = typeof a;
-        if (type !== 'function' && type !== 'object' && typeof b != 'object') {
-            return false;
-        }
-        const className = toString.call(a);
-        if (className !== toString.call(b)) {
-            return false;
-        }
-        switch (className) {
-            case '[object RegExp]':
-            case '[object String]':
-                return '' + a === '' + b;
-            case '[object Number]': {
-                if (+a !== +a) {
-                    return +b !== +b;
-                }
-                return +a === 0 ? 1 / +a === 1 / b : +a === +b;
-            }
-            case '[object Date]':
-            case '[object Boolean]': {
-                return +a === +b;
-            }
-            case '[object Array]': {
-                let length = a.length;
-                if (length !== b.length) {
-                    return false;
-                }
-                while (length--) {
-                    if (!sklearn.Attribute._isEquivalent(a[length], b[length])) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-        }
-
-        const keys = Object.keys(a);
-        let size = keys.length;
-        if (Object.keys(b).length != size) {
-            return false;
-        }
-        while (size--) {
-            const key = keys[size];
-            if (!(Object.prototype.hasOwnProperty.call(b, key) && sklearn.Attribute._isEquivalent(a[key], b[key]))) {
-                return false;
-            }
-        }
-        return true;
-    }
 };
 
 sklearn.Tensor = class {
@@ -370,12 +334,11 @@ sklearn.Tensor = class {
     constructor(value) {
         if (!sklearn.Utility.isTensor(value)) {
             const type = value.__class__.__module__ + '.' + value.__class__.__name__;
-            throw new sklearn.Error("Unknown tensor type '" + type + "'.");
+            throw new sklearn.Error("Unsupported tensor type '" + type + "'.");
         }
-        this._kind = 'NumPy Array';
-        this._type = new sklearn.TensorType(value.dtype.name, new sklearn.TensorShape(value.shape));
+        this._type = new sklearn.TensorType(value.dtype.__name__, new sklearn.TensorShape(value.shape));
         this._data = value.data;
-        if (value.dtype.name === 'string') {
+        if (this._type.dataType === 'string') {
             this._itemsize = value.dtype.itemsize;
         }
     }
@@ -385,7 +348,7 @@ sklearn.Tensor = class {
     }
 
     get kind() {
-        return this._kind;
+        return 'NumPy Array';
     }
 
     get state() {
@@ -412,6 +375,8 @@ sklearn.Tensor = class {
             case 'int64':
             case 'uint64':
                 return sklearn.Tensor._stringify(value, '', '    ');
+            default:
+                break;
         }
         return JSON.stringify(value, null, 4);
     }
@@ -437,8 +402,10 @@ sklearn.Tensor = class {
         switch (context.dataType) {
             case 'float32':
             case 'float64':
-            case 'int32':
             case 'uint32':
+            case 'int8':
+            case 'int16':
+            case 'int32':
             case 'int64':
             case 'uint64':
                 context.view = new DataView(this._data.buffer, this._data.byteOffset, this._data.byteLength);
@@ -447,6 +414,9 @@ sklearn.Tensor = class {
                 context.data = this._data;
                 context.itemsize = this._itemsize;
                 context.decoder = new TextDecoder('utf-8');
+                break;
+            case 'object':
+                context.data = this._data;
                 break;
             default:
                 context.state = "Tensor data type '" + context.dataType + "' is not implemented.";
@@ -478,14 +448,20 @@ sklearn.Tensor = class {
                         context.count++;
                         break;
                     }
-                    case 'int32': {
-                        results.push(context.view.getInt32(context.index, true));
-                        context.index += 4;
+                    case 'int8': {
+                        results.push(context.view.getInt8(context.index, true));
+                        context.index += 1;
                         context.count++;
                         break;
                     }
-                    case 'uint32': {
-                        results.push(context.view.getUint32(context.index, true));
+                    case 'int16': {
+                        results.push(context.view.getInt16(context.index, true));
+                        context.index += 2;
+                        context.count++;
+                        break;
+                    }
+                    case 'int32': {
+                        results.push(context.view.getInt32(context.index, true));
                         context.index += 4;
                         context.count++;
                         break;
@@ -493,6 +469,12 @@ sklearn.Tensor = class {
                     case 'int64': {
                         results.push(context.view.getInt64(context.index, true));
                         context.index += 8;
+                        context.count++;
+                        break;
+                    }
+                    case 'uint32': {
+                        results.push(context.view.getUint32(context.index, true));
+                        context.index += 4;
                         context.count++;
                         break;
                     }
@@ -510,6 +492,14 @@ sklearn.Tensor = class {
                         context.index += context.itemsize;
                         context.count++;
                         break;
+                    }
+                    case 'object': {
+                        results.push(context.data[context.index++]);
+                        context.count++;
+                        break;
+                    }
+                    default: {
+                        throw new sklearn.Error("Unsupported tensor data type '" + context.dataType + "'.");
                     }
                 }
             }
@@ -573,51 +563,6 @@ sklearn.TensorShape = class {
 
     toString() {
         return this._dimensions ? ('[' + this._dimensions.map((dimension) => dimension.toString()).join(',') + ']') : '';
-    }
-};
-
-sklearn.Metadata = class {
-
-    static open(context) {
-        if (sklearn.Metadata._metadata) {
-            return Promise.resolve(sklearn.Metadata._metadata);
-        }
-        return context.request('sklearn-metadata.json', 'utf-8', null).then((data) => {
-            sklearn.Metadata._metadata = new sklearn.Metadata(data);
-            return sklearn.Metadata._metadata;
-        }).catch(() => {
-            sklearn.Metadata._metadata = new sklearn.Metadata(null);
-            return sklearn.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._types = new Map();
-        this._attributes = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._types = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        return this._types.get(name);
-    }
-
-    attribute(type, name) {
-        const key = type + ':' + name;
-        if (!this._attributes.has(key)) {
-            const schema = this.type(type);
-            if (schema && schema.attributes && schema.attributes.length > 0) {
-                for (const attribute of schema.attributes) {
-                    this._attributes.set(type + ':' + attribute.name, attribute);
-                }
-            }
-            if (!this._attributes.has(key)) {
-                this._attributes.set(key, null);
-            }
-        }
-        return this._attributes.get(key);
     }
 };
 

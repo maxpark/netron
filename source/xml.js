@@ -204,10 +204,8 @@ xml.TextReader = class {
                                         namespaces.set(entry.localName, value);
                                     }
                                 }
-                                else {
-                                    if (entry.localName === 'xmlns') {
-                                        namespaces.set('', value);
-                                    }
+                                else if (entry.localName === 'xmlns') {
+                                    namespaces.set('', value);
                                 }
                             }
                             const pair = xml.Utility.split(name);
@@ -492,6 +490,10 @@ xml.TextReader = class {
                             else {
                                 this._unexpected();
                             }
+                            break;
+                        }
+                        default: {
+                            break;
                         }
                     }
                     break;
@@ -581,13 +583,14 @@ xml.TextReader = class {
     _nmtoken() {
         const position = this._position;
         const name = [];
-        const c = this._char.codePointAt(0);
+        let c = this._char.codePointAt(0);
         while (this._nameCharRegExp.test(this._char) || (c >= 0x300 && c <= 0x36f) || (c >= 0x203F && c <= 0x2040)) {
             name.push(this._char);
             this._next();
             if (this._char === undefined) {
                 break;
             }
+            c = this._char.codePointAt(0);
         }
         if (name.length > 0) {
             return name.join('');
@@ -897,7 +900,7 @@ xml.TextReader = class {
 
     _resolveEntityReference() {
         const position = this._position;
-        const entity = this._entityReference();
+        let entity = this._entityReference();
         const name = entity.substring(1, entity.length - 1);
         if (name.startsWith('#x')) {
             const value = parseInt(name.substring(2), 16);
@@ -910,26 +913,23 @@ xml.TextReader = class {
         else if (this._entities.has(name)) {
             return this._entities.get(name);
         }
-        else {
-            const documentType = this._document().documentType;
-            const entity = documentType ? documentType.entities.getNamedItem(name) : null;
-            if (entity) {
-                if (entity.systemId) {
-                    this._pushResource(entity.systemId, name, true);
-                }
-                else {
-                    this._pushString(entity.value, name, true);
-                }
+        const documentType = this._document().documentType;
+        entity = documentType ? documentType.entities.getNamedItem(name) : null;
+        if (entity) {
+            if (entity.systemId) {
+                this._pushResource(entity.systemId, name, true);
             }
             else {
-                if (this._context.length !== 0 || !documentType || documentType.parameterEntities.length === 0) {
-                    this._error("Undefined ENTITY '" + name + "'", position);
-                }
+                this._pushString(entity.value, name, true);
             }
-            return undefined;
         }
+        else if (this._context.length !== 0 || !documentType || documentType.parameterEntities.length === 0) {
+            this._error("Undefined ENTITY '" + name + "'", position);
+        }
+        return undefined;
     }
 
+    /* eslint-disable consistent-return */
     _entityReference() {
         if (this._char === '&') {
             const position = this._position;
@@ -977,6 +977,7 @@ xml.TextReader = class {
         }
         this._unexpected();
     }
+    /* eslint-enable consistent-return */
 
     _comment() {
         const data = this._terminal('--');
@@ -1359,10 +1360,13 @@ xml.Node = class {
 
     lookupNamespaceURI(prefix) {
         switch (prefix) {
-            case 'xml': return 'http://www.w3.org/XML/1998/namespace';
-            case 'xmlns': return 'http://www.w3.org/2000/xmlns/';
+            case 'xml':
+                return 'http://www.w3.org/XML/1998/namespace';
+            case 'xmlns':
+                return 'http://www.w3.org/2000/xmlns/';
+            default:
+                return null;
         }
-        return null;
     }
 };
 

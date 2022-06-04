@@ -84,8 +84,10 @@ java.io.InputObjectStream = class {
             case 0x74: { // TC_STRING
                 return this._newString(false);
             }
+            default: {
+                throw new java.io.Error("Unsupported code '" + code + "'.");
+            }
         }
-        throw new java.io.Error("Unsupported code '" + code + "'.");
     }
 
     _classDesc() {
@@ -99,8 +101,9 @@ java.io.InputObjectStream = class {
             case 0x70: // TC_NULL
                 this._reader.byte();
                 return null;
+            default:
+                throw new java.io.Error("Unsupported code '" + code + "'.");
         }
-        throw new java.io.Error("Unsupported code '" + code + "'.");
     }
 
     _newClassDesc() {
@@ -130,9 +133,10 @@ java.io.InputObjectStream = class {
                 return classDesc;
             }
             case 0x7D: // TC_PROXYCLASSDESC
-                break;
+                return null;
+            default:
+                throw new java.io.Error("Unsupported code '" + code + "'.");
         }
-        throw new java.io.Error("Unsupported code '" + code + "'.");
     }
 
     _classData(/* obj */) {
@@ -201,7 +205,6 @@ java.io.InputObjectStream.BinaryReader = class {
         this._position = 0;
         this._length = buffer.length;
         this._view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-        this._decoder = new TextDecoder('utf-8');
     }
 
     skip(offset) {
@@ -239,6 +242,7 @@ java.io.InputObjectStream.BinaryReader = class {
         const size = long ? this.uint64().toNumber() : this.uint16();
         const position = this._position;
         this.skip(size);
+        this._decoder = this._decoder || new TextDecoder('utf-8');
         return this._decoder.decode(this._buffer.subarray(position, this._position));
     }
 };

@@ -5,35 +5,26 @@ tensorrt.ModelFactory = class {
 
     match(context) {
         const stream = context.stream;
-        const signature = [ 0x70, 0x74, 0x72, 0x74 ]; // ptrt
-        if (stream.length >= 4 && stream.peek(4).every((value, index) => value === signature[index])) {
-            return 'tensorrt.engine';
+        const engine = tensorrt.Engine.open(stream);
+        if (engine) {
+            return engine;
         }
         const extension = context.identifier.split('.').pop().toLowerCase();
         if (extension === 'plan') {
-            return 'tensorrt.plan';
+            return tensorrt.Plan.open(stream);
         }
         return undefined;
     }
 
     open(context, match) {
-        return tensorrt.Metadata.open(context).then((metadata) => {
-            const stream = context.stream;
-            const buffer = stream.peek();
-            switch (match) {
-                case 'tensorrt.engine':
-                    return new tensorrt.Model(metadata, new tensorrt.Engine(buffer));
-                case 'tensorrt.plan':
-                    return new tensorrt.Model(metadata, new tensorrt.Plan(buffer));
-            }
-        });
+        return Promise.resolve().then(() => new tensorrt.Model(null, match));
     }
 };
 
 tensorrt.Model = class {
 
     constructor(metadata, model) {
-        this._format = 'TensorRT';
+        this._format = model.format;
         this._graphs = [ new tensorrt.Graph(metadata, model) ];
     }
 
@@ -71,44 +62,45 @@ tensorrt.Graph = class {
 
 tensorrt.Engine = class {
 
-    constructor(/* buffer */) {
+    static open(stream) {
+        const signature = [ 0x70, 0x74, 0x72, 0x74 ]; // ptrt
+        if (stream.length >= 4 && stream.peek(4).every((value, index) => value === signature[index])) {
+            return new tensorrt.Engine(stream);
+        }
+        return null;
+    }
+
+    constructor(stream) {
+        this._stream = stream;
+    }
+
+    get format() {
+        this._read();
+        return 'Tensor RT Engine';
+    }
+
+    _read() {
         throw new tensorrt.Error('Invalid file content. File contains undocumented TensorRT engine data.');
     }
 };
 
 tensorrt.Plan = class {
 
-    constructor(/* buffer */) {
+    static open(stream) {
+        return new tensorrt.Plan(stream);
+    }
+
+    constructor(stream) {
+        this._stream = stream;
+    }
+
+    get format() {
+        this._read();
+        return 'Tensor RT Plan';
+    }
+
+    _read() {
         throw new tensorrt.Error('Invalid file content. File contains undocumented TensorRT plan data.');
-    }
-};
-
-
-tensorrt.Metadata = class {
-
-    static open(context) {
-        if (tensorrt.Metadata._metadata) {
-            return Promise.resolve(tensorrt.Metadata._metadata);
-        }
-        return context.request('tensorrt-metadata.json', 'utf-8', null).then((data) => {
-            tensorrt.Metadata._metadata = new tensorrt.Metadata(data);
-            return tensorrt.Metadata._metadata;
-        }).catch(() => {
-            tensorrt.Metadata._metadata = new tensorrt.Metadata(null);
-            return tensorrt.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._map = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._map = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        return this._map.get(name);
     }
 };
 

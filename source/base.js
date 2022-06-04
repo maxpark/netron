@@ -98,7 +98,7 @@ base.Int64 = class Int64 {
     toString(radix) {
         const r = radix || 10;
         if (r < 2 || r > 16) {
-            throw RangeError('radix');
+            throw new RangeError('radix');
         }
         if (this.isZero) {
             return '0';
@@ -216,7 +216,7 @@ base.Uint64 = class Uint64 {
     toString(radix) {
         const r = radix || 10;
         if (r < 2 || 36 < r) {
-            throw RangeError('radix');
+            throw new RangeError('radix');
         }
         if (this.isZero) {
             return '0';
@@ -278,9 +278,7 @@ base.Utility = class {
             if (b.isNegative) {
                 return this.negate().multiply(b.negate());
             }
-            else {
-                return this.negate().multiply(b).negate();
-            }
+            return this.negate().multiply(b).negate();
         }
         else if (b.isNegative) {
             return this.multiply(b.negate()).negate();
@@ -325,7 +323,7 @@ base.Utility = class {
 
     static divide(a, b, unsigned) {
         if (b.isZero) {
-            throw Error('Division by zero.');
+            throw new Error('Division by zero.');
         }
         if (a.isZero) {
             return unsigned ? base.Uint64.zero : base.Int64.zero;
@@ -341,19 +339,15 @@ base.Utility = class {
                 else if (b.equals(base.Int64.min)) {
                     return base.Int64.one;
                 }
-                else {
-                    const half = base.Utility._shiftRight(a, unsigned, 1);
-                    const halfDivide = half.divide(b);
-                    approx = base.Utility._shiftLeft(halfDivide, halfDivide instanceof base.Uint64, 1);
-                    if (approx.eq(base.Int64.zero)) {
-                        return b.isNegative ? base.Int64.one : base.Int64.negativeOne;
-                    }
-                    else {
-                        remainder = a.subtract(b.multiply(approx));
-                        result = approx.add(remainder.divide(b));
-                        return result;
-                    }
+                const half = base.Utility._shiftRight(a, unsigned, 1);
+                const halfDivide = half.divide(b);
+                approx = base.Utility._shiftLeft(halfDivide, halfDivide instanceof base.Uint64, 1);
+                if (approx.eq(base.Int64.zero)) {
+                    return b.isNegative ? base.Int64.one : base.Int64.negativeOne;
                 }
+                remainder = a.subtract(b.multiply(approx));
+                result = approx.add(remainder.divide(b));
+                return result;
             }
             else if (b.equals(base.Int64.min)) {
                 return unsigned ? base.Uint64.zero : base.Int64.zero;
@@ -438,6 +432,22 @@ base.Uint64.zero = new base.Uint64(0, 0);
 base.Uint64.one = new base.Uint64(1, 0);
 base.Uint64.max = new base.Uint64(-1, -1);
 
+base.Complex = class Complex {
+
+    constructor(real, imaginary) {
+        this.real = real;
+        this.imaginary = imaginary;
+    }
+
+    static create(real, imaginary) {
+        return new base.Complex(real, imaginary);
+    }
+
+    toString(/* radix */) {
+        return this.real + ' + ' + this.imaginary + 'i';
+    }
+};
+
 if (!DataView.prototype.getFloat16) {
     DataView.prototype.getFloat16 = function(byteOffset, littleEndian) {
         const value = this.getUint16(byteOffset, littleEndian);
@@ -501,6 +511,21 @@ if (!DataView.prototype.setFloat16) {
     }
 }
 
+if (!DataView.prototype.getBfloat16) {
+    DataView.prototype.getBfloat16 = function(byteOffset, littleEndian) {
+        if (littleEndian) {
+            DataView.__bfloat16_get_uint16_le[1] = this.getUint16(byteOffset, littleEndian);
+            return DataView.__bfloat16_get_float32_le[0];
+        }
+        DataView.__bfloat16_uint16_be[0] = this.getUint16(byteOffset, littleEndian);
+        return DataView.__bfloat16_get_float32_be[0];
+    };
+    DataView.__bfloat16_get_float32_le = new Float32Array(1);
+    DataView.__bfloat16_get_float32_be = new Float32Array(1);
+    DataView.__bfloat16_get_uint16_le = new Uint16Array(DataView.__bfloat16_get_float32_le.buffer, DataView.__bfloat16_get_float32_le.byteOffset, 2);
+    DataView.__bfloat16_get_uint16_be = new Uint16Array(DataView.__bfloat16_get_float32_be.buffer, DataView.__bfloat16_get_float32_be.byteOffset, 2);
+}
+
 DataView.prototype.getInt64 = DataView.prototype.getInt64 || function(byteOffset, littleEndian) {
     return littleEndian ?
         new base.Int64(this.getUint32(byteOffset, true), this.getUint32(byteOffset + 4, true)) :
@@ -535,6 +560,40 @@ DataView.prototype.setUint64 = DataView.prototype.setUint64 || function(byteOffs
     }
 };
 
+DataView.prototype.getComplex64 = DataView.prototype.getComplex64 || function(byteOffset, littleEndian) {
+    const real = littleEndian ? this.getFloat32(byteOffset, littleEndian) : this.getFloat32(byteOffset + 4, littleEndian);
+    const imaginary = littleEndian ? this.getFloat32(byteOffset + 4, littleEndian) : this.getFloat32(byteOffset, littleEndian);
+    return base.Complex.create(real, imaginary);
+};
+
+DataView.prototype.setComplex64 = DataView.prototype.setComplex64 || function(byteOffset, value, littleEndian) {
+    if (littleEndian) {
+        this.setFloat32(byteOffset, value.real, littleEndian);
+        this.setFloat32(byteOffset + 4, value.imaginary, littleEndian);
+    }
+    else {
+        this.setFloat32(byteOffset + 4, value.real, littleEndian);
+        this.setFloat32(byteOffset, value.imaginary, littleEndian);
+    }
+};
+
+DataView.prototype.getComplex128 = DataView.prototype.getComplex128 || function(byteOffset, littleEndian) {
+    const real = littleEndian ? this.getFloat64(byteOffset, littleEndian) : this.getFloat64(byteOffset + 8, littleEndian);
+    const imaginary = littleEndian ? this.getFloat64(byteOffset + 8, littleEndian) : this.getFloat64(byteOffset, littleEndian);
+    return base.Complex.create(real, imaginary);
+};
+
+DataView.prototype.setComplex128 = DataView.prototype.setComplex128 || function(byteOffset, value, littleEndian) {
+    if (littleEndian) {
+        this.setFloat64(byteOffset, value.real, littleEndian);
+        this.setFloat64(byteOffset + 8, value.imaginary, littleEndian);
+    }
+    else {
+        this.setFloat64(byteOffset + 8, value.real, littleEndian);
+        this.setFloat64(byteOffset, value.imaginary, littleEndian);
+    }
+};
+
 DataView.prototype.getBits = DataView.prototype.getBits || function(offset, bits /*, signed */) {
     offset = offset * bits;
     const available = (this.byteLength << 3) - offset;
@@ -561,7 +620,6 @@ base.BinaryReader = class {
         this._position = 0;
         this._length = this._buffer.length;
         this._view = new DataView(this._buffer.buffer, this._buffer.byteOffset, this._buffer.byteLength);
-        this._utf8 = new TextDecoder('utf-8');
     }
 
     get length() {
@@ -661,7 +719,62 @@ base.BinaryReader = class {
         const position = this._position;
         this.skip(length);
         const data = this._buffer.subarray(position, this._position);
-        return this._utf8.decode(data);
+        this._decoder = this._decoder || new TextDecoder('utf-8');
+        return this._decoder.decode(data);
+    }
+};
+
+base.Metadata = class {
+
+    static open(context, name) {
+        base.Metadata._metadata = base.Metadata._metadata || new Map();
+        if (base.Metadata._metadata.has(name)) {
+            return Promise.resolve(base.Metadata._metadata.get(name));
+        }
+        return context.request(name, 'utf-8', null).then((data) => {
+            const library = new base.Metadata(data);
+            base.Metadata._metadata.set(name, library);
+            return library;
+        }).catch(() => {
+            const library = new base.Metadata(null);
+            base.Metadata._metadata.set(name, library);
+            return library;
+        });
+    }
+
+    constructor(data) {
+        this._types = new Map();
+        this._attributes = new Map();
+        if (data) {
+            const metadata = JSON.parse(data);
+            for (const entry of metadata) {
+                this._types.set(entry.name, entry);
+                if (entry.identifier !== undefined) {
+                    this._types.set(entry.identifier, entry);
+                }
+            }
+        }
+    }
+
+    type(name) {
+        if (!this._types.has(name)) {
+            this._types.set(name, { name: name.toString() });
+        }
+        return this._types.get(name);
+    }
+
+    attribute(type, name) {
+        const key = type + ':' + name;
+        if (!this._attributes.has(key)) {
+            this._attributes.set(key, null);
+            const metadata = this.type(type);
+            if (metadata && Array.isArray(metadata.attributes)) {
+                for (const attribute of metadata.attributes) {
+                    this._attributes.set(type + ':' + attribute.name, attribute);
+                }
+            }
+        }
+        return this._attributes.get(key);
     }
 };
 
@@ -675,4 +788,5 @@ if (typeof module !== 'undefined' && typeof module.exports === 'object') {
     module.exports.Int64 = base.Int64;
     module.exports.Uint64 = base.Uint64;
     module.exports.BinaryReader = base.BinaryReader;
+    module.exports.Metadata = base.Metadata;
 }

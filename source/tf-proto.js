@@ -1989,6 +1989,7 @@ $root.tensorflow.FullTypeId = {
     "TFT_ARRAY": 1001,
     "TFT_OPTIONAL": 1002,
     "TFT_LITERAL": 1003,
+    "TFT_ENCODED": 1004,
     "TFT_BOOL": 200,
     "TFT_UINT8": 201,
     "TFT_UINT16": 202,
@@ -2007,6 +2008,7 @@ $root.tensorflow.FullTypeId = {
     "TFT_STRING": 214,
     "TFT_DATASET": 10102,
     "TFT_RAGGED": 10103,
+    "TFT_ITERATOR": 10104,
     "TFT_MUTEX_LOCK": 10202,
     "TFT_LEGACY_VARIANT": 10203
 };
@@ -7119,6 +7121,9 @@ $root.tensorflow.RunMetadata = class RunMetadata {
                 case 4:
                     message.function_graphs.push($root.tensorflow.RunMetadata.FunctionGraphs.decode(reader, reader.uint32()));
                     break;
+                case 5:
+                    message.session_metadata = $root.tensorflow.SessionMetadata.decode(reader, reader.uint32());
+                    break;
                 default:
                     reader.skipType(tag & 7);
                     break;
@@ -7145,6 +7150,9 @@ $root.tensorflow.RunMetadata = class RunMetadata {
                 case "function_graphs":
                     message.function_graphs.push($root.tensorflow.RunMetadata.FunctionGraphs.decodeText(reader));
                     break;
+                case "session_metadata":
+                    message.session_metadata = $root.tensorflow.SessionMetadata.decodeText(reader);
+                    break;
                 default:
                     reader.field(tag, message);
                     break;
@@ -7156,6 +7164,7 @@ $root.tensorflow.RunMetadata = class RunMetadata {
 
 $root.tensorflow.RunMetadata.prototype.step_stats = null;
 $root.tensorflow.RunMetadata.prototype.cost_graph = null;
+$root.tensorflow.RunMetadata.prototype.session_metadata = null;
 
 $root.tensorflow.RunMetadata.FunctionGraphs = class FunctionGraphs {
 
@@ -8465,6 +8474,12 @@ $root.tensorflow.CoordinationServiceConfig = class CoordinationServiceConfig {
                 case 6:
                     message.coordinated_jobs.push(reader.string());
                     break;
+                case 7:
+                    message.shutdown_barrier_timeout_in_ms = reader.int64();
+                    break;
+                case 8:
+                    message.agent_destruction_without_shutdown = reader.bool();
+                    break;
                 default:
                     reader.skipType(tag & 7);
                     break;
@@ -8497,6 +8512,12 @@ $root.tensorflow.CoordinationServiceConfig = class CoordinationServiceConfig {
                 case "coordinated_jobs":
                     reader.array(message.coordinated_jobs, () => reader.string());
                     break;
+                case "shutdown_barrier_timeout_in_ms":
+                    message.shutdown_barrier_timeout_in_ms = reader.int64();
+                    break;
+                case "agent_destruction_without_shutdown":
+                    message.agent_destruction_without_shutdown = reader.bool();
+                    break;
                 default:
                     reader.field(tag, message);
                     break;
@@ -8511,6 +8532,8 @@ $root.tensorflow.CoordinationServiceConfig.prototype.service_leader = "";
 $root.tensorflow.CoordinationServiceConfig.prototype.enable_health_check = false;
 $root.tensorflow.CoordinationServiceConfig.prototype.cluster_register_timeout_in_ms = protobuf.Int64.create(0);
 $root.tensorflow.CoordinationServiceConfig.prototype.heartbeat_timeout_in_ms = protobuf.Int64.create(0);
+$root.tensorflow.CoordinationServiceConfig.prototype.shutdown_barrier_timeout_in_ms = protobuf.Int64.create(0);
+$root.tensorflow.CoordinationServiceConfig.prototype.agent_destruction_without_shutdown = false;
 
 $root.tensorflow.DebugTensorWatch = class DebugTensorWatch {
 
@@ -8912,6 +8935,9 @@ $root.tensorflow.RewriterConfig = class RewriterConfig {
                 case 28:
                     message.use_plugin_optimizers = reader.int32();
                     break;
+                case 30:
+                    message.experimental_conditional_code_motion = reader.int32();
+                    break;
                 case 12:
                     message.meta_optimizer_iterations = reader.int32();
                     break;
@@ -9028,6 +9054,9 @@ $root.tensorflow.RewriterConfig = class RewriterConfig {
                 case "use_plugin_optimizers":
                     message.use_plugin_optimizers = reader.enum($root.tensorflow.RewriterConfig.Toggle);
                     break;
+                case "experimental_conditional_code_motion":
+                    message.experimental_conditional_code_motion = reader.enum($root.tensorflow.RewriterConfig.Toggle);
+                    break;
                 case "meta_optimizer_iterations":
                     message.meta_optimizer_iterations = reader.enum($root.tensorflow.RewriterConfig.NumIterationsType);
                     break;
@@ -9099,6 +9128,7 @@ $root.tensorflow.RewriterConfig.prototype.auto_mixed_precision_mkl = 0;
 $root.tensorflow.RewriterConfig.prototype.auto_mixed_precision_cpu = 0;
 $root.tensorflow.RewriterConfig.prototype.disable_meta_optimizer = false;
 $root.tensorflow.RewriterConfig.prototype.use_plugin_optimizers = 0;
+$root.tensorflow.RewriterConfig.prototype.experimental_conditional_code_motion = 0;
 $root.tensorflow.RewriterConfig.prototype.meta_optimizer_iterations = 0;
 $root.tensorflow.RewriterConfig.prototype.min_graph_nodes = 0;
 $root.tensorflow.RewriterConfig.prototype.experimental_disable_compressed_tensor_optimization = false;
@@ -9116,7 +9146,9 @@ $root.tensorflow.RewriterConfig.Toggle = {
     "DEFAULT": 0,
     "ON": 1,
     "OFF": 2,
-    "AGGRESSIVE": 3
+    "AGGRESSIVE": 3,
+    "EXPERIMENTAL_MLIR": 4,
+    "EXPERIMENTAL_BOTH": 5
 };
 
 $root.tensorflow.RewriterConfig.CpuLayout = {

@@ -86,10 +86,10 @@ numpy.ModelFactory = class {
                 format = 'NumPy Weights';
                 const layers = new Map();
                 const weights = match.value;
-                let separator = '_';
-                if (Array.from(weights.keys()).every((key) => key.indexOf('.') !== -1) &&
-                    !Array.from(weights.keys()).every((key) => key.indexOf('_') !== -1)) {
-                    separator = '.';
+                let separator = '.';
+                if (Array.from(weights.keys()).filter((key) => key.indexOf('_') !== -1) &&
+                    Array.from(weights.keys()).every((key) => key.indexOf('_') > key.indexOf('.'))) {
+                    separator = '_';
                 }
                 for (const pair of weights) {
                     const name = pair[0];
@@ -142,6 +142,9 @@ numpy.ModelFactory = class {
                     graphs.push({ name: obj.name, layers: Array.from(layers.values()) });
                 }
                 break;
+            }
+            default: {
+                throw new numpy.Error("Unsupported NumPy format '" + match.name + "'.");
             }
         }
         const model = new numpy.Model(format, graphs);
@@ -270,7 +273,7 @@ numpy.Node = class {
 numpy.Tensor = class  {
 
     constructor(array) {
-        this._type = new numpy.TensorType(array.dtype.name, new numpy.TensorShape(array.shape));
+        this._type = new numpy.TensorType(array.dtype.__name__, new numpy.TensorShape(array.shape));
         this._data = array.tobytes();
         this._byteorder = array.dtype.byteorder;
         this._itemsize = array.dtype.itemsize;
@@ -368,6 +371,8 @@ numpy.Tensor = class  {
                         case 'uint32':
                             results.push(context.rawData.getUint32(context.index, littleEndian));
                             break;
+                        default:
+                            throw new numpy.Error("Unsupported tensor data type '" + context.dataType + "'.");
                     }
                     context.index += context.itemSize;
                     context.count++;
@@ -481,6 +486,9 @@ numpy.Utility = class {
                             }
                             continue;
                         }
+                        else if (key === '_metadata') {
+                            continue;
+                        }
                         return null;
                     }
                     return weights;
@@ -533,11 +541,12 @@ numpy.Utility = class {
                 }
                 return weights;
             }
+            return null;
         };
-        const keys = [ '', 'blobs' ];
+        const keys = [ '', 'blobs', 'model' ];
         for (const key of keys) {
             const weights = dict(obj, key);
-            if (weights) {
+            if (weights && weights.size > 0) {
                 return weights;
             }
         }

@@ -3,34 +3,31 @@ var mxnet = mxnet || {};
 var json = json || require('./json');
 var zip = zip || require('./zip');
 var ndarray = ndarray || {};
+var base = base || require('./base');
 
 mxnet.ModelFactory = class {
 
     match(context) {
         const identifier = context.identifier;
         const extension = identifier.split('.').pop().toLowerCase();
-        switch (extension) {
-            case 'json': {
-                const obj = context.open('json');
-                if (obj && obj.nodes && obj.arg_nodes && obj.heads) {
-                    return 'mxnet.json';
-                }
-                break;
+        if (extension === 'json') {
+            const obj = context.open('json');
+            if (obj && obj.nodes && obj.arg_nodes && obj.heads) {
+                return 'mxnet.json';
             }
-            case 'params': {
-                const stream = context.stream;
-                const signature = [ 0x12, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 ];
-                if (stream.length > signature.length && stream.peek(signature.length).every((value, index) => value == signature[index])) {
-                    return 'mxnet.params';
-                }
-                break;
+        }
+        if (extension === 'params') {
+            const stream = context.stream;
+            const signature = [ 0x12, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 ];
+            if (stream.length > signature.length && stream.peek(signature.length).every((value, index) => value == signature[index])) {
+                return 'mxnet.params';
             }
         }
         return undefined;
     }
 
     open(context, match) {
-        return mxnet.Metadata.open(context).then((metadata) => {
+        return context.metadata('mxnet-metadata.json').then((metadata) => {
             const basename = (base, identifier, extension, suffix, append) => {
                 if (!base) {
                     if (identifier.toLowerCase().endsWith(extension)) {
@@ -675,17 +672,21 @@ mxnet.Attribute = class {
         this._value = value;
 
         let number;
-        const schema = metadata.attribute(type, name);
-        if (schema && schema.type) {
-            switch (schema.type) {
+        metadata = metadata.attribute(type, name);
+        if (metadata && metadata.type) {
+            switch (metadata.type) {
                 case 'boolean':
                     switch (value) {
-                        case 'True':
-                            this._value = true;
-                            break;
+                        case 0:
                         case 'False':
                             this._value = false;
                             break;
+                        case 1:
+                        case 'True':
+                            this._value = true;
+                            break;
+                        default:
+                            throw new mxnet.Error("Unsupported attribute boolean value '" + value + "'.");
                     }
                     break;
                 case 'int32':
@@ -717,15 +718,16 @@ mxnet.Attribute = class {
                         }
                     }
                     break;
+                default:
+                    throw new mxnet.Error("Unsupported attribute type '" + metadata.type + "'.");
             }
         }
-
-        if (schema) {
-            if (Object.prototype.hasOwnProperty.call(schema, 'visible') && !schema.visible) {
+        if (metadata) {
+            if (metadata.visible === false) {
                 this._visible = false;
             }
-            else if (Object.prototype.hasOwnProperty.call(schema, 'default')) {
-                let defaultValue = schema.default;
+            else if (metadata.default !== undefined) {
+                let defaultValue = metadata.default;
                 if (this._value == defaultValue) {
                     this._visible = false;
                 }
@@ -879,6 +881,8 @@ mxnet.Tensor = class {
                         context.index += 8;
                         context.count++;
                         break;
+                    default:
+                        throw new mxnet.Error("Unsupported tensor data type '" + context.dataType + "'.");
                 }
             }
         }
@@ -920,7 +924,7 @@ mxnet.TensorType = class {
             case 5: this._dataType = 'int8'; break;
             case 6: this._dataType = 'int64'; break;
             case -1: this._dataType = '?'; break;
-            default: throw new mxnet.Error("Unknown type '" + dataType + "'.");
+            default: throw new mxnet.Error("Unsupported type '" + dataType + "'.");
         }
         this._shape = shape;
     }
@@ -964,7 +968,28 @@ mxnet.ndarray = class {
     static load(buffer) {
         // NDArray::Load(dmlc::Stream* fi, std::vector<NDArray>* data, std::vector<std::string>* keys)
         const map = new Map();
-        const reader = new mxnet.ndarray.BinaryReader(buffer);
+        const reader = new base.BinaryReader(buffer);
+        reader.uint64 = function() {
+            const value = this.uint32();
+            if (this.uint32() != 0) {
+                throw new mxnet.Error('Large uint64 value.');
+            }
+            return value;
+        };
+        reader.uint32s = function() {
+            const array = new Array(this.uint32());
+            for (let i = 0; i < array.length; i++) {
+                array[i] = this.uint32();
+            }
+            return array;
+        };
+        reader.uint64s = function() {
+            const array = new Array(this.uint32());
+            for (let i = 0; i < array.length; i++) {
+                array[i] = this.uint64();
+            }
+            return array;
+        };
         if (reader.uint64() !== 0x112) { // kMXAPINDArrayListMagic
             throw new mxnet.Error('Invalid signature.');
         }
@@ -990,13 +1015,12 @@ mxnet.ndarray = class {
     }
 };
 
-
 mxnet.ndarray.NDArray = class {
 
     constructor(reader) {
         mxnet.ndarray.NDArray._dataTypeSizeTable = [ 4, 8, 2, 1, 4, 1, 8 ];
         switch (reader.uint32()) {
-            case 0xF993faca: { // NDARRAY_V3_MAGIC
+            case 0xf993faca: { // NDARRAY_V3_MAGIC
                 throw new mxnet.Array('mxnet.ndarray.NDArray v3 not supported.');
             }
             case 0xf993fac9: { // NDARRAY_V2_MAGIC
@@ -1006,6 +1030,7 @@ mxnet.ndarray.NDArray = class {
                     case 0: num_aux_data = 0; break; // kDefaultStorage
                     case 1: num_aux_data = 1; break; // kRowSparseStorage
                     case 2: num_aux_data = 2; break; // kCSRStorage
+                    default: throw mxnet.Error("Unsupported NDArray type '" + stype + "'.");
                 }
                 this.sshape = null;
                 if (num_aux_data > 0) {
@@ -1060,106 +1085,6 @@ mxnet.context.Context = class {
     constructor(reader) {
         this._deviceType = reader.uint32();
         this._deviceId = reader.uint32();
-    }
-};
-
-mxnet.ndarray.BinaryReader = class {
-
-    constructor(buffer) {
-        this._buffer = buffer;
-        this._position = 0;
-        this._end = buffer.length;
-    }
-
-    skip(offset) {
-        this._position += offset;
-        if (this._position > this._end) {
-            throw new mxnet.Error('Data not available.');
-        }
-    }
-
-    read(size) {
-        const position = this._position;
-        this.skip(size);
-        return this._buffer.subarray(position, this._position);
-    }
-
-    uint16() {
-        const position = this._position;
-        this.skip(2);
-        return this._buffer[position] | (this._buffer[position + 1] << 8);
-    }
-
-    uint32() {
-        return this.uint16() | (this.uint16() << 16);
-    }
-
-    uint64() {
-        const value = this.uint32();
-        if (this.uint32() != 0) {
-            throw new mxnet.Error('Large int64 value.');
-        }
-        return value;
-    }
-
-    uint32s() {
-        const array = new Array(this.uint32());
-        for (let i = 0; i < array.length; i++) {
-            array[i] = this.uint32();
-        }
-        return array;
-    }
-
-    uint64s() {
-        const array = new Array(this.uint32());
-        for (let i = 0; i < array.length; i++) {
-            array[i] = this.uint64();
-        }
-        return array;
-    }
-};
-
-mxnet.Metadata = class {
-
-    static open(context) {
-        if (mxnet.Metadata._metadata) {
-            return Promise.resolve(mxnet.Metadata._metadata);
-        }
-        return context.request('mxnet-metadata.json', 'utf-8', null).then((data) => {
-            mxnet.Metadata._metadata = new mxnet.Metadata(data);
-            return mxnet.Metadata._metadata;
-        }).catch(() => {
-            mxnet.Metadata._metadata = new mxnet.Metadata(null);
-            return mxnet.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._map = new Map();
-        this._attributeCache = {};
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._map = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        return this._map.get(name);
-    }
-
-    attribute(type, name) {
-        let map = this._attributeCache[type];
-        if (!map) {
-            map = {};
-            const schema = this.type(type);
-            if (schema && schema.attributes) {
-                for (const attribute of schema.attributes) {
-                    map[attribute.name] = attribute;
-                }
-            }
-            this._attributeCache[type] = map;
-        }
-        return map[name] || null;
     }
 };
 

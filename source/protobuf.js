@@ -342,14 +342,12 @@ protobuf.BinaryReader = class {
             }
             this._position = end;
         }
+        else if (obj !== undefined && obj.length < 1000000) {
+            obj.push(this.float());
+        }
         else {
-            if (obj !== undefined && obj.length < 1000000) {
-                obj.push(this.float());
-            }
-            else {
-                obj = undefined;
-                this.float();
-            }
+            obj = undefined;
+            this.float();
         }
         return obj;
     }
@@ -373,14 +371,12 @@ protobuf.BinaryReader = class {
             }
             this._position = end;
         }
+        else if (obj !== undefined && obj.length < 1000000) {
+            obj.push(this.double());
+        }
         else {
-            if (obj !== undefined && obj.length < 1000000) {
-                obj.push(this.double());
-            }
-            else {
-                obj = undefined;
-                this.double();
-            }
+            obj = undefined;
+            this.double();
         }
         return obj;
     }
@@ -492,10 +488,10 @@ protobuf.BinaryReader = class {
                 break;
             }
             case 5: {
-                if (this._position + 4 >= this._length) {
+                this._position += 4;
+                if (this._position > this._length) {
                     return false;
                 }
-                this._position += 4;
                 break;
             }
             default: {
@@ -837,8 +833,9 @@ protobuf.TextReader = class {
                 this.next();
                 this.semicolon();
                 return false;
+            default:
+                throw new protobuf.Error("Couldn't parse boolean '" + token + "'" + this.location());
         }
-        throw new protobuf.Error("Couldn't parse boolean '" + token + "'" + this.location());
     }
 
     bytes() {
@@ -942,13 +939,16 @@ protobuf.TextReader = class {
         let k;
         let v;
         while (!this.end()) {
-            switch (this.tag()) {
+            const tag = this.tag();
+            switch (tag) {
                 case 'key':
                     k = key();
                     break;
                 case 'value':
                     v = value();
                     break;
+                default:
+                    throw new protobuf.Error("Unsupported entry tag '" + tag + "'.");
             }
         }
         obj[k] = v;
@@ -1048,7 +1048,7 @@ protobuf.TextReader = class {
     }
 
     field(token /*, module */) {
-        throw new protobuf.Error("Unknown field '" + token + "'" + this.location());
+        throw new protobuf.Error("Unsupported field '" + token + "'" + this.location());
     }
 
     token() {
@@ -1082,6 +1082,8 @@ protobuf.TextReader = class {
                     this._position = this._decoder.position;
                     c = this._decoder.decode();
                     continue;
+                default:
+                    break;
             }
             break;
         }
@@ -1246,17 +1248,20 @@ protobuf.TextReader = class {
                     break;
                 }
                 if (token === '-' && c === 'i' && this._decoder.decode() === 'n' && this._decoder.decode() === 'f') {
-                    token += 'inf';
+                    token = '-inf';
                     position = this._decoder.position;
                 }
-                if (token !== '-' && token !== '+' && token !== '.') {
-                    this._decoder.position = position;
-                    this._token = token;
-                    return;
+                if (token === '-' || token === '+' || token === '.') {
+                    throw new protobuf.Error("Unexpected token '" + token + "'" + this.location());
                 }
+                this._decoder.position = position;
+                this._token = token;
+                return;
+            }
+            default: {
+                throw new protobuf.Error("Unexpected token '" + c + "'" + this.location());
             }
         }
-        throw new protobuf.Error("Unexpected token '" + c + "'" + this.location());
     }
 
     expect(value) {

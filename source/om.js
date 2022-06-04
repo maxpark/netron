@@ -14,7 +14,7 @@ om.ModelFactory = class {
     open(context, match) {
         const file = match;
         if (!file.model) {
-            throw om.Error('File does not contain a model definition.');
+            throw new om.Error('File does not contain a model definition.');
         }
         return context.require('./om-proto').then(() => {
             let model = null;
@@ -27,7 +27,7 @@ om.ModelFactory = class {
                 const message = error && error.message ? error.message : error.toString();
                 throw new om.Error('File format is not ge.proto.ModelDef (' + message.replace(/\.$/, '') + ').');
             }
-            return om.Metadata.open(context).then((metadata) => {
+            return context.metadata('om-metadata.json').then((metadata) => {
                 return new om.Model(metadata, model, file.weights);
             });
         });
@@ -314,6 +314,9 @@ om.Attribute = class {
                 this._value = null;
                 break;
             }
+            default: {
+                throw new om.Error("Unsupported attribute type '" + JSON.stringify(value).substring(0, 32) + "'.");
+            }
         }
     }
 
@@ -558,7 +561,7 @@ om.File = class {
                         break;
                     }
                     default: {
-                        throw new om.Error("Unknown partition type '" + partition.type + "'.");
+                        throw new om.Error("Unsupported partition type '" + partition.type + "'.");
                     }
                 }
             }
@@ -578,57 +581,12 @@ om.Utility = class {
         if (value < om.Utility._types.length) {
             return om.Utility._types[value];
         }
-        throw new om.Error("Unknown dtype '" + value + "'.");
+        throw new om.Error("Unsupported dtype '" + value + "'.");
     }
 
     static decodeText(value) {
         om.Utility._textDecoder = om.Utility._textDecoder || new TextDecoder('utf-8');
         return om.Utility._textDecoder.decode(value);
-    }
-};
-
-om.Metadata = class {
-
-    static open(context) {
-        if (om.Metadata._metadata) {
-            return Promise.resolve(om.Metadata._metadata);
-        }
-        return context.request('om-metadata.json', 'utf-8', null).then((data) => {
-            om.Metadata._metadata = new om.Metadata(data);
-            return om.Metadata._metadata;
-        }).catch(() => {
-            om.Metadata._metadata = new om.Metadata(null);
-            return om.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._map = new Map();
-        this._attributes = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._map = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        return this._map.get(name);
-    }
-
-    attribute(type, name) {
-        const key = type + ':' + name;
-        if (!this._attributes.has(key)) {
-            const schema = this.type(type);
-            if (schema && schema.attributes && schema.attributes.length > 0) {
-                for (const attribute of schema.attributes) {
-                    this._attributes.set(type + ':' + attribute.name, attribute);
-                }
-            }
-            if (!this._attributes.has(key)) {
-                this._attributes.set(key, null);
-            }
-        }
-        return this._attributes.get(key);
     }
 };
 

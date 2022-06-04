@@ -16,7 +16,7 @@ acuity.ModelFactory = class {
     }
 
     open(context) {
-        return acuity.Metadata.open(context).then((metadata) => {
+        return context.metadata('acuity-metadata.json').then((metadata) => {
             const obj = context.open('json');
             return new acuity.Model(metadata, obj);
         });
@@ -145,8 +145,8 @@ acuity.Node = class {
         if (this._type) {
             if (layer.parameters) {
                 for (const key of Object.keys(layer.parameters)) {
-                    const attributeMetadata = metadata.attribute(this._type, key);
-                    this._attributes.push(new acuity.Attribute(attributeMetadata, key, layer.parameters[key]));
+                    const attribute = new acuity.Attribute(metadata.attribute(this._type.name, key), key, layer.parameters[key]);
+                    this._attributes.push(attribute);
                 }
             }
         }
@@ -361,55 +361,6 @@ acuity.Tensor = class {
     }
 };
 
-acuity.Metadata = class {
-
-    static open(context) {
-        if (acuity.Metadata._metadata) {
-            return Promise.resolve(acuity.Metadata._metadata);
-        }
-        return context.request('acuity-metadata.json', 'utf-8', null).then((data) => {
-            acuity.Metadata._metadata = new acuity.Metadata(data);
-            return acuity.Metadata._metadata;
-        }).catch(() => {
-            acuity.Metadata._metadata = new acuity.Metadata(null);
-            return acuity.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._map = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._map = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        return this._map.get(name);
-    }
-
-    attribute(type, name) {
-        const schema = this.type(type);
-        if (schema) {
-            let attributeMap = schema.attributeMap;
-            if (!attributeMap) {
-                attributeMap = {};
-                if (schema.attributes) {
-                    for (const attribute of schema.attributes) {
-                        attributeMap[attribute.name] = attribute;
-                    }
-                }
-                schema.attributeMap = attributeMap;
-            }
-            const attributeSchema = attributeMap[name];
-            if (attributeSchema) {
-                return attributeSchema;
-            }
-        }
-        return null;
-    }
-};
-
 acuity.Inference = class {
 
     static infer(layers) {
@@ -472,6 +423,7 @@ acuity.Inference = class {
                 const out_h = ~~((inputs[0][1] + params.stride - 1) / params.stride);
                 return [ [ inputs[0][0], out_h, params.weights ] ];
             }
+            return null;
         });
         operators.set('convolution', (inputs, params) => {
             if (params.padding == 'VALID') {
@@ -484,6 +436,7 @@ acuity.Inference = class {
                 const out_w = ~~((inputs[0][2] + params.stride_w - 1) / params.stride_w);
                 return [ [ inputs[0][0], out_h, out_w, params.weights ] ];
             }
+            return null;
         });
         operators.set('deconvolution', (inputs, params) => {
             return [ params.output_shape.map((item, index) => item == 0 ? inputs[0][index] : item) ];
@@ -540,6 +493,7 @@ acuity.Inference = class {
                 const out_w = ~~((inputs[0][2] + params.stride_w - 1) / params.stride_w);
                 return [ [inputs[0][0], out_h, out_w, inputs[0][3]] ];
             }
+            return null;
         });
         operators.set('reduce', (inputs, params) => {
             const newShape = inputs[0].slice();
@@ -555,9 +509,9 @@ acuity.Inference = class {
                 axis_list.sort((a, b) => {
                     return b - a;
                 });
-                axis_list.map((item) => {
+                for (const item of axis_list) {
                     newShape.splice(item, 1);
-                });
+                }
                 if (!newShape.length) {
                     newShape.splice(0, 0, 0);
                 }
@@ -601,9 +555,9 @@ acuity.Inference = class {
         operators.set('squeeze', (inputs, params) => {
             const newShape = inputs[0].slice();
             const axis_list = [...new Set(params.axis_list)].sort((a, b) => b - a);
-            axis_list.map((item) => {
+            for (const item of axis_list) {
                 newShape.splice(item, 1);
-            });
+            }
             return [ newShape ];
         });
         operators.set('space2depth', (inputs, params) => {

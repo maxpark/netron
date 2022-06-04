@@ -22,16 +22,21 @@ ncnn.ModelFactory = class {
             }
         }
         if (identifier.endsWith('.param') || identifier.endsWith('.cfg.ncnn')) {
-            const reader = text.Reader.open(context.stream, 2048);
-            const signature = reader.read();
-            if (signature !== undefined) {
-                if (signature.trim() === '7767517') {
-                    return 'ncnn.model';
+            try {
+                const reader = text.Reader.open(context.stream, 2048);
+                const signature = reader.read();
+                if (signature !== undefined) {
+                    if (signature.trim() === '7767517') {
+                        return 'ncnn.model';
+                    }
+                    const header = signature.trim().split(' ');
+                    if (header.length === 2 && header.every((value) => value >>> 0 === parseFloat(value))) {
+                        return 'ncnn.model';
+                    }
                 }
-                const header = signature.trim().split(' ');
-                if (header.length === 2 && header.every((value) => value >>> 0 === parseFloat(value))) {
-                    return 'ncnn.model';
-                }
+            }
+            catch (err) {
+                // continue regardless of error
             }
         }
         if (identifier.endsWith('.bin') || identifier.endsWith('.weights.ncnn')) {
@@ -52,7 +57,7 @@ ncnn.ModelFactory = class {
     }
 
     open(context, match) {
-        return ncnn.Metadata.open(context).then((metadata) => {
+        return context.metadata('ncnn-metadata.json').then((metadata) => {
             const identifier = context.identifier.toLowerCase();
             const openBinary = (param, bin) => {
                 const reader = new ncnn.BinaryParamReader(metadata, param);
@@ -104,6 +109,9 @@ ncnn.ModelFactory = class {
                             return openBinary(buffer, context.stream.peek());
                         });
                     });
+                }
+                default: {
+                    throw new ncnn.Error("Unsupported ncnn format '" + match + "'.");
                 }
             }
         });
@@ -248,7 +256,7 @@ ncnn.Node = class {
         this._chain = [];
         this._name = layer.name || '';
         const type = layer.type;
-        this._type = metadata.type(type) || metadata.operator(type) || { name: type };
+        this._type = metadata.type(type);
         const attributeMetadata = this._type && this._type.attributes ? this._type.attributes : [];
         const attributes = layer.attributes;
         const inputs = layer.inputs || [];
@@ -535,6 +543,9 @@ ncnn.Node = class {
                 attributes.delete('2');
                 break;
             }
+            default: {
+                break;
+            }
         }
 
         this._attributes = Array.from(attributes).map((attribute) => {
@@ -732,6 +743,8 @@ ncnn.Tensor = class {
                         context.index += 2;
                         context.count++;
                         break;
+                    default:
+                        throw new ncnn.Error("Unsupported tensor data type " + this._type.dataType + "'.");
                 }
             }
         }
@@ -783,63 +796,6 @@ ncnn.TensorShape = class {
 
     toString() {
         return this._dimensions ? ('[' + this._dimensions.map((dimension) => dimension ? dimension.toString() : '?').join(',') + ']') : '';
-    }
-};
-
-ncnn.Metadata = class {
-
-    static open(context) {
-        if (ncnn.Metadata._metadata) {
-            return Promise.resolve(ncnn.Metadata._metadata);
-        }
-        return context.request('ncnn-metadata.json', 'utf-8', null).then((data) => {
-            ncnn.Metadata._metadata = new ncnn.Metadata(data);
-            return ncnn.Metadata._metadata;
-        }).catch(() => {
-            ncnn.Metadata._metadata = new ncnn.Metadata(null);
-            return ncnn.Metadata._metadatas;
-        });
-    }
-
-    constructor(data) {
-        this._operatorMap = new Map();
-        this._map = new Map();
-        this._attributes = new Map();
-        if (data) {
-            const items = JSON.parse(data);
-            for (const item of items) {
-                if (item.name) {
-                    this._map.set(item.name, item);
-                    if (Object.prototype.hasOwnProperty.call(item, 'operator')) {
-                        this._operatorMap.set(item.operator, item.name);
-                    }
-                }
-            }
-        }
-    }
-
-    operator(code) {
-        return this._operatorMap.get(code);
-    }
-
-    type(name) {
-        return this._map.get(name);
-    }
-
-    attribute(type, name) {
-        const key = type + ':' + name;
-        if (!this._attributes.has(key)) {
-            const schema = this.type(type);
-            if (schema && schema.attributes && schema.attributes.length > 0) {
-                for (const attribute of schema.attributes) {
-                    this._attributes.set(type + ':' + attribute.name, attribute);
-                }
-            }
-            if (!this._attributes.has(key)) {
-                this._attributes.set(key, null);
-            }
-        }
-        return this._attributes.get(key);
     }
 };
 
@@ -939,7 +895,7 @@ ncnn.BinaryParamReader = class {
         this._layers = [];
         for (let i = 0; i < layerCount; i++) {
             const typeIndex = reader.int32();
-            const operator = metadata.operator(typeIndex);
+            const operator = metadata.type(typeIndex);
             const layer = {
                 type: operator || typeIndex.toString(),
                 name: i.toString(),
@@ -1017,7 +973,7 @@ ncnn.BlobReader = class {
                             break;
                         case 0x0002C056: // size * sizeof(float) - raw data with extra scaling
                         default:
-                            throw new ncnn.Error("Unknown weight type '" + type + "'.");
+                            throw new ncnn.Error("Unsupported weight type '" + type + "'.");
                     }
                 }
                 else {
@@ -1057,7 +1013,7 @@ ncnn.BlobReader = class {
                             data = null;
                             break;
                         default:
-                            throw new ncnn.Error("Unknown weight type '" + dataType + "'.");
+                            throw new ncnn.Error("Unsupported weight type '" + dataType + "'.");
                     }
                 }
             }

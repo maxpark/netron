@@ -18,7 +18,7 @@ mlnet.ModelFactory = class {
     }
 
     open(context) {
-        return mlnet.Metadata.open(context).then((metadata) => {
+        return context.metadata('mlnet-metadata.json').then((metadata) => {
             const entries = context.entries('zip');
             const reader = new mlnet.ModelReader(entries);
             return new mlnet.Model(metadata, reader);
@@ -313,7 +313,7 @@ mlnet.TensorType = class {
                 this._dataType = mlnet.TensorType._map.get(codec.itemType.name);
             }
             else {
-                throw new mlnet.Error("Unknown data type '" + codec.itemType.name + "'.");
+                throw new mlnet.Error("Unsupported data type '" + codec.itemType.name + "'.");
             }
             this._shape = new mlnet.TensorShape(codec.dims);
         }
@@ -321,7 +321,7 @@ mlnet.TensorType = class {
             this._dataType = 'key2';
         }
         else {
-            throw new mlnet.Error("Unknown data type '" + codec.name + "'.");
+            throw new mlnet.Error("Unsupported data type '" + codec.name + "'.");
         }
     }
 
@@ -353,50 +353,6 @@ mlnet.TensorShape = class {
             return '';
         }
         return '[' + this._dimensions.join(',') + ']';
-    }
-};
-
-mlnet.Metadata = class {
-
-    static open(context) {
-        if (mlnet.Metadata._metadata) {
-            return Promise.resolve(mlnet.Metadata._metadata);
-        }
-        return context.request('mlnet-metadata.json', 'utf-8', null).then((data) => {
-            mlnet.Metadata._metadata = new mlnet.Metadata(data);
-            return mlnet.Metadata._metadata;
-        }).catch(() => {
-            mlnet.Metadata._metadata = new mlnet.Metadata(null);
-            return mlnet.Metadata._metadatas;
-        });
-    }
-
-    constructor(data) {
-        this._map = {};
-        this._attributeCache = {};
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._map = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        return this._map.get(name);
-    }
-
-    attribute(type, name) {
-        let map = this._attributeCache[type];
-        if (!map) {
-            map = {};
-            const schema = this.type(type);
-            if (schema && schema.attributes && schema.attributes.length > 0) {
-                for (const attribute of schema.attributes) {
-                    map[attribute.name] = attribute;
-                }
-            }
-            this._attributeCache[type] = map;
-        }
-        return map[name] || null;
     }
 };
 
@@ -526,7 +482,7 @@ mlnet.ComponentCatalog = class {
 
     create(signature, context) {
         if (!this._map.has(signature)) {
-            throw new mlnet.Error("Unknown loader signature '" + signature + "'.");
+            throw new mlnet.Error("Unsupported loader signature '" + signature + "'.");
         }
         const type = this._map.get(signature);
         return Reflect.construct(type, [ context ]);
@@ -544,7 +500,7 @@ mlnet.ModelHeader = class {
         if (data) {
             const reader = new mlnet.Reader(data);
 
-            const textDecoder = new TextDecoder('ascii');
+            const decoder = new TextDecoder('ascii');
             reader.assert('ML\0MODEL');
             this.versionWritten = reader.uint32();
             this.versionReadable = reader.uint32();
@@ -555,11 +511,11 @@ mlnet.ModelHeader = class {
             const stringTableSize = reader.uint64();
             const stringCharsOffset = reader.uint64();
             /* v stringCharsSize = */ reader.uint64();
-            this.modelSignature = textDecoder.decode(reader.bytes(8));
+            this.modelSignature = decoder.decode(reader.bytes(8));
             this.modelVersionWritten = reader.uint32();
             this.modelVersionReadable = reader.uint32();
-            this.loaderSignature = textDecoder.decode(reader.bytes(24).filter((c) => c != 0));
-            this.loaderSignatureAlt = textDecoder.decode(reader.bytes(24).filter((c) => c != 0));
+            this.loaderSignature = decoder.decode(reader.bytes(24).filter((c) => c != 0));
+            this.loaderSignatureAlt = decoder.decode(reader.bytes(24).filter((c) => c != 0));
             const tailOffset = reader.uint64();
             /* let tailLimit = */ reader.uint64();
             const assemblyNameOffset = reader.uint64();
@@ -587,7 +543,7 @@ mlnet.ModelHeader = class {
             }
             if (assemblyNameOffset != 0) {
                 reader.seek(assemblyNameOffset);
-                this.assemblyName = textDecoder.decode(reader.bytes(assemblyNameSize));
+                this.assemblyName = decoder.decode(reader.bytes(assemblyNameSize));
             }
             reader.seek(tailOffset);
             reader.assert('LEDOM\0LM');
@@ -1665,7 +1621,7 @@ mlnet.NormalizingTransformer = class extends mlnet.OneToOneTransformerBase {
             switch (itemKind) {
                 case 9: itemType = 'float32'; break;
                 case 10: itemType = 'float64'; break;
-                default: throw new mlnet.Error("Unknown NormalizingTransformer item kind '" + itemKind + "'.");
+                default: throw new mlnet.Error("Unsupported NormalizingTransformer item kind '" + itemKind + "'.");
             }
             const type = itemType + (!isVector ? '' : '[' + shape.map((dim) => dim.toString()).join(',') + ']');
             const name = 'Normalizer_' + ('00' + i).slice(-3);
@@ -1724,7 +1680,7 @@ mlnet.TermMap = class {
                 break;
             }
             default:
-                throw new mlnet.Error("Unknown term map type '" + mtype.toString() + "'.");
+                throw new mlnet.Error("Unsupported term map type '" + mtype.toString() + "'.");
         }
     }
 };
@@ -2113,9 +2069,9 @@ mlnet.InternalTreeEnsemble = class {
                 case mlnet.InternalTreeEnsemble.TreeType.Affine:
                     // Affine regression trees do not actually work, nor is it clear how they ever
                     // could have worked within TLC, so the chance of this happening seems remote.
-                    throw new mlnet.Error('Affine regression trees unsupported');
+                    throw new mlnet.Error('Affine regression trees unsupported.');
                 default:
-                    throw new mlnet.Error('Unknown ensemble tree type.');
+                    throw new mlnet.Error('Unsupported ensemble tree type.');
             }
         }
         this.Bias = reader.float64();
@@ -2289,7 +2245,7 @@ mlnet.Codec = class {
                 this.count = reader.uint64();
                 break;
             default:
-                throw new mlnet.Error("Unknown codec '" + this.name + "'.");
+                throw new mlnet.Error("Unsupported codec '" + this.name + "'.");
         }
     }
 
@@ -2312,7 +2268,7 @@ mlnet.Codec = class {
                 }
                 break;
             default:
-                throw new mlnet.Error("Unknown codec read operation '" + this.name + "'.");
+                throw new mlnet.Error("Unsupported codec read operation '" + this.name + "'.");
         }
         return values;
     }

@@ -8,12 +8,12 @@ torch.ModelFactory = class {
     }
 
     open(context, match) {
-        return torch.Metadata.open(context).then((metadata) => {
+        return context.metadata('torch-metadata.json').then((metadata) => {
             const identifier = context.identifier;
             const reader = match;
             reader.callback = (name) => {
                 if (name && name != 'nn.JointTrainModule' && !name.startsWith('nn.MSDNet_') && !name.startsWith('onmt.')) {
-                    context.exception(new torch.Error("Unknown type '" + name + "' in '" + identifier + "'."), false);
+                    context.exception(new torch.Error("Unsupported type '" + name + "' in '" + identifier + "'."), false);
                 }
                 return null;
             };
@@ -338,6 +338,8 @@ torch.Node = class {
             case 'nn.StereoJoin':
                 delete module.output_L;
                 break;
+            default:
+                break;
         }
         this._attributes = [];
         if (module.__class__) {
@@ -613,55 +615,6 @@ torch.TensorShape = class {
     }
 };
 
-
-torch.Metadata = class {
-
-    static open(context) {
-        if (torch.Metadata._metadata) {
-            return Promise.resolve(torch.Metadata._metadata);
-        }
-        return context.request('torch-metadata.json', 'utf-8', null).then((data) => {
-            torch.Metadata._metadata = new torch.Metadata(data);
-            return torch.Metadata._metadata;
-        }).catch(() => {
-            torch.Metadata._metadata = new torch.Metadata(null);
-            return torch.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._types = new Map();
-        this._attributes = new Map();
-        if (data) {
-            const items = JSON.parse(data);
-            for (const item of items) {
-                this._types.set(item.name, item);
-            }
-        }
-    }
-
-    type(name) {
-        if (!this._types.has(name)) {
-            this._types.set(name, { name: name });
-        }
-        return this._types.get(name);
-    }
-
-    attribute(type, name) {
-        const key = type + ':' + name;
-        if (!this._attributes.has(key)) {
-            this._attributes.set(key, null);
-            const metadata = this.type(type);
-            if (metadata && Array.isArray(metadata.attributes)) {
-                for (const attribute of metadata.attributes) {
-                    this._attributes.set(type + ':' + attribute.name, attribute);
-                }
-            }
-        }
-        return this._attributes.get(key);
-    }
-};
-
 torch.Error = class extends Error {
 
     constructor(message) {
@@ -728,6 +681,8 @@ torch.T7Reader = class {
                             case 'float64':
                                 array[i] = reader.float64();
                                 break;
+                            default:
+                                throw new torch.Error("Unsupported data type '" + dataType + "'.");
                         }
                     }
                     this._data = array;
@@ -1260,7 +1215,7 @@ torch.TextReader = class {
         const data = this.line(size);
         const content = this._textDecoder.decode(data);
         if (size != content.length) {
-            throw torch.Error('Invalid string length.');
+            throw new torch.Error('Invalid string length.');
         }
         return content;
     }

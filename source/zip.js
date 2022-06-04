@@ -29,8 +29,11 @@ zip.Archive = class {
                             return true;
                         }
                     }
+                    if (!signature) {
+                        break;
+                    }
                 }
-                while (position > 0 && signature);
+                while (position > 0);
                 return false;
             };
             if (!seek([ 0x50, 0x4B, 0x05, 0x06 ])) {
@@ -83,8 +86,8 @@ zip.Archive = class {
             }
             header.encoding = flags & 0x800 ? 'utf-8' : 'ascii';
             header.compressionMethod = reader.uint16();
-            reader.uint32(); // date
-            reader.uint32(); // crc32
+            header.date = reader.uint32(); // date
+            header.crc32 = reader.uint32(); // crc32
             header.compressedSize = reader.uint32();
             header.size = reader.uint32();
             header.nameLength = reader.uint16(); // file name length
@@ -153,33 +156,37 @@ zip.Archive = class {
 zip.Entry = class {
 
     constructor(stream, header) {
+        this._name = header.name;
         stream.seek(header.localHeaderOffset);
         const signature = [ 0x50, 0x4B, 0x03, 0x04 ];
         if (stream.position + 4 > stream.length || !stream.read(4).every((value, index) => value === signature[index])) {
-            throw new zip.Error('Invalid Zip local file header signature.');
+            this._stream = new zip.ErrorStream(header.size, 'Invalid Zip local file header signature.');
         }
-        const reader = new zip.BinaryReader(stream.read(26));
-        reader.skip(22);
-        header.nameLength = reader.uint16();
-        const extraDataLength = reader.uint16();
-        header.nameBuffer = stream.read(header.nameLength);
-        stream.skip(extraDataLength);
-        const decoder = new TextDecoder(header.encoding);
-        this._name = decoder.decode(header.nameBuffer);
-        this._stream = stream.stream(header.compressedSize);
-        switch (header.compressionMethod) {
-            case 0: { // stored
-                if (header.size !== header.compressedSize) {
-                    throw new zip.Error('Invalid compression size.');
+        else {
+            const reader = new zip.BinaryReader(stream.read(26));
+            reader.skip(22);
+            header.nameLength = reader.uint16();
+            const extraDataLength = reader.uint16();
+            header.nameBuffer = stream.read(header.nameLength);
+            stream.skip(extraDataLength);
+            const decoder = new TextDecoder(header.encoding);
+            this._name = decoder.decode(header.nameBuffer);
+            this._stream = stream.stream(header.compressedSize);
+            switch (header.compressionMethod) {
+                case 0: { // stored
+                    if (header.size !== header.compressedSize) {
+                        this._stream = new zip.ErrorStream(header.size, 'Invalid compression size.');
+                    }
+                    break;
                 }
-                break;
+                case 8: { // deflate
+                    this._stream = new zip.InflaterStream(this._stream, header.size);
+                    break;
+                }
+                default: {
+                    this._stream = new new zip.ErrorStream(header.size, 'Invalid compression method.');
+                }
             }
-            case 8: { // deflate
-                this._stream = new zip.InflaterStream(this._stream, header.size);
-                break;
-            }
-            default:
-                throw new zip.Error('Invalid compression method.');
         }
     }
 
@@ -232,7 +239,7 @@ zip.Inflater = class {
                         break;
                     }
                     default: {
-                        throw new zip.Error('Unknown block type.');
+                        throw new zip.Error('Unsupported block type.');
                     }
                 }
             } while ((type & 1) == 0);
@@ -553,11 +560,11 @@ zip.InflaterStream = class {
 
     peek(length) {
         const position = this._position;
-        length = length !== undefined ? length : this._length - position;
+        length = length !== undefined ? length : this.length - position;
         this.skip(length);
         const end = this._position;
         this.seek(position);
-        if (position === 0 && length === this._length) {
+        if (position === 0 && length === this.length) {
             return this._buffer;
         }
         return this._buffer.subarray(position, end);
@@ -565,12 +572,17 @@ zip.InflaterStream = class {
 
     read(length) {
         const position = this._position;
-        length = length !== undefined ? length : this._length - position;
+        length = length !== undefined ? length : this.length - position;
         this.skip(length);
-        if (position === 0 && length === this._length) {
+        if (position === 0 && length === this.length) {
             return this._buffer;
         }
         return this._buffer.subarray(position, this._position);
+    }
+
+    stream(length) {
+        const buffer = this.read(length);
+        return new zip.BinaryReader(buffer);
     }
 
     byte() {
@@ -589,6 +601,51 @@ zip.InflaterStream = class {
             this._stream.seek(position);
             delete this._stream;
         }
+    }
+};
+
+zip.ErrorStream = class {
+
+    constructor(size, message) {
+        this._message = message;
+        this._position = 0;
+        this._length = size;
+    }
+
+    get position() {
+        return this._position;
+    }
+
+    get length() {
+        return this._length;
+    }
+
+    seek(position) {
+        this._position = position >= 0 ? position : this._length + position;
+    }
+
+    skip(offset) {
+        this._position += offset;
+    }
+
+    peek(/* length */) {
+        this._throw();
+    }
+
+    read(/* length */) {
+        this._throw();
+    }
+
+    stream(/* length */) {
+        this._throw();
+    }
+
+    byte() {
+        this._throw();
+    }
+
+    _throw() {
+        throw new zip.Error(this._message);
     }
 };
 

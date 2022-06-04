@@ -42,15 +42,15 @@ $root.tflite.QuantizationDetails = class {
     static decode(reader, position, type) {
         switch (type) {
             case 1: return $root.tflite.CustomQuantization.decode(reader, position);
+            default: return undefined;
         }
-        return undefined;
     }
 
     static decodeText(reader, json, type) {
         switch (type) {
             case 'CustomQuantization': return $root.tflite.CustomQuantization.decodeText(reader, json);
+            default: return undefined;
         }
-        return undefined;
     }
 };
 
@@ -136,8 +136,8 @@ $root.tflite.SparseIndexVector = class {
             case 1: return $root.tflite.Int32Vector.decode(reader, position);
             case 2: return $root.tflite.Uint16Vector.decode(reader, position);
             case 3: return $root.tflite.Uint8Vector.decode(reader, position);
+            default: return undefined;
         }
-        return undefined;
     }
 
     static decodeText(reader, json, type) {
@@ -145,8 +145,8 @@ $root.tflite.SparseIndexVector = class {
             case 'Int32Vector': return $root.tflite.Int32Vector.decodeText(reader, json);
             case 'Uint16Vector': return $root.tflite.Uint16Vector.decodeText(reader, json);
             case 'Uint8Vector': return $root.tflite.Uint8Vector.decodeText(reader, json);
+            default: return undefined;
         }
-        return undefined;
     }
 };
 
@@ -371,7 +371,9 @@ $root.tflite.BuiltinOperator = {
     RANDOM_UNIFORM: 148,
     MULTINOMIAL: 149,
     GELU: 150,
-    DYNAMIC_UPDATE_SLICE: 151
+    DYNAMIC_UPDATE_SLICE: 151,
+    RELU_0_TO_1: 152,
+    UNSORTED_SEGMENT_PROD: 153
 };
 
 $root.tflite.BuiltinOptions = class {
@@ -495,8 +497,9 @@ $root.tflite.BuiltinOptions = class {
             case 115: return $root.tflite.BucketizeOptions.decode(reader, position);
             case 116: return $root.tflite.GeluOptions.decode(reader, position);
             case 117: return $root.tflite.DynamicUpdateSliceOptions.decode(reader, position);
+            case 118: return $root.tflite.UnsortedSegmentProdOptions.decode(reader, position);
+            default: return undefined;
         }
-        return undefined;
     }
 
     static decodeText(reader, json, type) {
@@ -618,8 +621,9 @@ $root.tflite.BuiltinOptions = class {
             case 'BucketizeOptions': return $root.tflite.BucketizeOptions.decodeText(reader, json);
             case 'GeluOptions': return $root.tflite.GeluOptions.decodeText(reader, json);
             case 'DynamicUpdateSliceOptions': return $root.tflite.DynamicUpdateSliceOptions.decodeText(reader, json);
+            case 'UnsortedSegmentProdOptions': return $root.tflite.UnsortedSegmentProdOptions.decodeText(reader, json);
+            default: return undefined;
         }
-        return undefined;
     }
 };
 
@@ -2473,6 +2477,21 @@ $root.tflite.DynamicUpdateSliceOptions = class DynamicUpdateSliceOptions {
     }
 };
 
+$root.tflite.UnsortedSegmentProdOptions = class UnsortedSegmentProdOptions {
+
+    static decode(reader, position) {
+        const $ = new $root.tflite.UnsortedSegmentProdOptions();
+        $.num_segments = reader.int32_(position, 4, 0);
+        return $;
+    }
+
+    static decodeText(reader, json) {
+        const $ = new $root.tflite.UnsortedSegmentProdOptions();
+        $.num_segments = reader.value(json.num_segments, 0);
+        return $;
+    }
+};
+
 $root.tflite.OperatorCode = class OperatorCode {
 
     static decode(reader, position) {
@@ -2672,7 +2691,8 @@ $root.tflite.AssociatedFileType = {
     TENSOR_AXIS_LABELS: 2,
     TENSOR_VALUE_LABELS: 3,
     TENSOR_AXIS_SCORE_CALIBRATION: 4,
-    VOCABULARY: 5
+    VOCABULARY: 5,
+    SCANN_INDEX_FILE: 6
 };
 
 $root.tflite.AssociatedFile = class AssociatedFile {
@@ -2762,8 +2782,8 @@ $root.tflite.ContentProperties = class {
             case 2: return $root.tflite.ImageProperties.decode(reader, position);
             case 3: return $root.tflite.BoundingBoxProperties.decode(reader, position);
             case 4: return $root.tflite.AudioProperties.decode(reader, position);
+            default: return undefined;
         }
-        return undefined;
     }
 
     static decodeText(reader, json, type) {
@@ -2772,8 +2792,8 @@ $root.tflite.ContentProperties = class {
             case 'ImageProperties': return $root.tflite.ImageProperties.decodeText(reader, json);
             case 'BoundingBoxProperties': return $root.tflite.BoundingBoxProperties.decodeText(reader, json);
             case 'AudioProperties': return $root.tflite.AudioProperties.decodeText(reader, json);
+            default: return undefined;
         }
-        return undefined;
     }
 };
 
@@ -2871,8 +2891,8 @@ $root.tflite.ProcessUnitOptions = class {
             case 4: return $root.tflite.BertTokenizerOptions.decode(reader, position);
             case 5: return $root.tflite.SentencePieceTokenizerOptions.decode(reader, position);
             case 6: return $root.tflite.RegexTokenizerOptions.decode(reader, position);
+            default: return undefined;
         }
-        return undefined;
     }
 
     static decodeText(reader, json, type) {
@@ -2883,8 +2903,8 @@ $root.tflite.ProcessUnitOptions = class {
             case 'BertTokenizerOptions': return $root.tflite.BertTokenizerOptions.decodeText(reader, json);
             case 'SentencePieceTokenizerOptions': return $root.tflite.SentencePieceTokenizerOptions.decodeText(reader, json);
             case 'RegexTokenizerOptions': return $root.tflite.RegexTokenizerOptions.decodeText(reader, json);
+            default: return undefined;
         }
-        return undefined;
     }
 };
 

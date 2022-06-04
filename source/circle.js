@@ -1,7 +1,7 @@
 
 var circle = circle || {};
 var flatbuffers = flatbuffers || require('./flatbuffers');
-var flexbuffers = {};
+var flexbuffers = flexbuffers || require('./flexbuffers');
 var zip = zip || require('./zip');
 
 circle.ModelFactory = class {
@@ -60,10 +60,10 @@ circle.ModelFactory = class {
                     break;
                 }
                 default: {
-                    throw new circle.Error("Unknown Circle format '" + match + "'.");
+                    throw new circle.Error("Unsupported Circle format '" + match + "'.");
                 }
             }
-            return circle.Metadata.open(context).then((metadata) => {
+            return context.metadata('circle-metadata.json').then((metadata) => {
                 return new circle.Model(metadata, model);
             });
         });
@@ -113,6 +113,9 @@ circle.Model = class {
                             this._author = modelMetadata.author || '';
                             this._license = modelMetadata.license || '';
                         }
+                        break;
+                    }
+                    default: {
                         break;
                     }
                 }
@@ -210,8 +213,10 @@ circle.Graph = class {
                     else if (contentProperties instanceof circle.schema.ImageProperties) {
                         denotation = 'Image';
                         switch(contentProperties.color_space) {
+                            case 0: denotation += '(Unknown)'; break;
                             case 1: denotation += '(RGB)'; break;
                             case 2: denotation += '(Grayscale)'; break;
+                            default: throw circle.Error("Unsupported image color space '" + contentProperties.color_space + "'.");
                         }
                     }
                     else if (contentProperties instanceof circle.schema.BoundingBoxProperties) {
@@ -323,22 +328,24 @@ circle.Node = class {
                 let decoded = false;
                 if (node.custom_options_format === circle.schema.CustomOptionsFormat.FLEXBUFFERS) {
                     try {
-                        const reader = flexbuffers.Reader.open(node.custom_options);
-                        const custom_options = reader.read();
-                        if (Array.isArray(custom_options)) {
-                            const attribute = new circle.Attribute(null, 'custom_options', custom_options);
-                            this._attributes.push(attribute);
-                            decoded = true;
-                        }
-                        else if (custom_options) {
-                            for (const pair of Object.entries(custom_options)) {
-                                const key = pair[0];
-                                const value = pair[1];
-                                const schema = metadata.attribute(type.name, key);
-                                const attribute = new circle.Attribute(schema, key, value);
+                        const reader = flexbuffers.BinaryReader.open(node.custom_options);
+                        if (reader) {
+                            const custom_options = reader.read();
+                            if (Array.isArray(custom_options)) {
+                                const attribute = new circle.Attribute(null, 'custom_options', custom_options);
                                 this._attributes.push(attribute);
+                                decoded = true;
                             }
-                            decoded = true;
+                            else if (custom_options) {
+                                for (const pair of Object.entries(custom_options)) {
+                                    const key = pair[0];
+                                    const value = pair[1];
+                                    const schema = metadata.attribute(type.name, key);
+                                    const attribute = new circle.Attribute(schema, key, value);
+                                    this._attributes.push(attribute);
+                                }
+                                decoded = true;
+                            }
                         }
                     }
                     catch (err) {
@@ -352,12 +359,13 @@ circle.Node = class {
             }
             const options = node.builtin_options;
             if (options) {
-                for (const name of Object.keys(options)) {
-                    const value = options[name];
+                for (const entry of Object.entries(options)) {
+                    const name = entry[0];
+                    const value = entry[1];
                     if (name === 'fused_activation_function' && value !== 0) {
                         const activationFunctionMap = { 1: 'Relu', 2: 'ReluN1To1', 3: 'Relu6', 4: 'Tanh', 5: 'SignBit' };
                         if (!activationFunctionMap[value]) {
-                            throw new circle.Error("Unknown activation funtion index '" + JSON.stringify(value) + "'.");
+                            throw new circle.Error("Unsupported activation funtion index '" + JSON.stringify(value) + "'.");
                         }
                         const type = activationFunctionMap[value];
                         this._chain = [ new circle.Node(metadata, null, { name: type }, null, []) ];
@@ -474,20 +482,25 @@ circle.Argument = class {
         this._initializer = initializer;
         const quantization = tensor.quantization;
         if (quantization) {
-            let value = 'q';
-            const scale = (quantization.scale.length == 1) ? quantization.scale[0] : 0;
-            const zeroPoint = ((quantization.zero_point.length == 1) ? quantization.zero_point[0] : 0).toString();
-            if (scale !== 0 || zeroPoint !== '0') {
-                value = scale.toString() + ' * ' + (zeroPoint === '0' ? 'q' : ('(q' + (!zeroPoint.startsWith('-') ? ' - ' + zeroPoint : ' + ' + zeroPoint.substring(1)) + ')'));
+            const length = Math.max(quantization.scale.length, quantization.zero_point.length, quantization.min.length, quantization.max.length);
+            const list = [];
+            for (let i = 0; i < length; i++) {
+                let value = 'q';
+                const scale = i < quantization.scale.length ? quantization.scale[i] : 0;
+                const zeroPoint = (i < quantization.zero_point.length ? quantization.zero_point[i] : 0).toString();
+                if (scale !== 0 || zeroPoint !== '0') {
+                    value = scale.toString() + ' * ' + (zeroPoint === '0' ? 'q' : ('(q' + (!zeroPoint.startsWith('-') ? ' - ' + zeroPoint : ' + ' + zeroPoint.substring(1)) + ')'));
+                }
+                if (i < quantization.min.length) {
+                    value = quantization.min[i].toString() + ' \u2264 ' + value;
+                }
+                if (i < quantization.max.length) {
+                    value = value + ' \u2264 ' + quantization.max[i].toString();
+                }
+                list.push(value);
             }
-            if (quantization.min.length == 1) {
-                value = quantization.min[0].toString() + ' \u2264 ' + value;
-            }
-            if (quantization.max.length == 1) {
-                value = value + ' \u2264 ' + quantization.max[0].toString();
-            }
-            if (value != 'q') {
-                this._quantization = value;
+            if (list.length > 0 && !list.every((value) => value === 'q')) {
+                this._quantization = list;
             }
         }
     }
@@ -758,52 +771,6 @@ circle.TensorShape = class {
     }
 };
 
-circle.Metadata = class {
-
-    static open(context) {
-        if (circle.Metadata._metadata) {
-            return Promise.resolve(circle.Metadata._metadata);
-        }
-        return context.request('circle-metadata.json', 'utf-8', null).then((data) => {
-            circle.Metadata._metadata = new circle.Metadata(data);
-            return circle.Metadata._metadata;
-        }).catch(() => {
-            circle.Metadata._metadata = new circle.Metadata(null);
-            return circle.Metadata._metadata;
-        });
-    }
-
-    constructor(data) {
-        this._types = new Map();
-        this._attributes = new Map();
-        if (data) {
-            const metadata = JSON.parse(data);
-            this._types = new Map(metadata.map((item) => [ item.name, item ]));
-        }
-    }
-
-    type(name) {
-        if (!this._types.has(name)) {
-            this._types.set(name, { name: name });
-        }
-        return this._types.get(name);
-    }
-
-    attribute(type, name) {
-        const key = type + ':' + name;
-        if (!this._attributes.has(key)) {
-            this._attributes.set(key, null);
-            const metadata = this.type(type);
-            if (metadata && Array.isArray(metadata.attributes)) {
-                for (const attribute of metadata.attributes) {
-                    this._attributes.set(type + ':' + attribute.name, attribute);
-                }
-            }
-        }
-        return this._attributes.get(key);
-    }
-};
-
 circle.Utility = class {
 
     static dataType(type) {
@@ -836,204 +803,6 @@ circle.Error = class extends Error {
     constructor(message) {
         super(message);
         this.name = 'Error loading Circle model.';
-    }
-};
-
-flexbuffers.Reader = class {
-
-    static open(buffer) {
-        return new flexbuffers.Reader(buffer);
-    }
-
-    constructor(buffer) {
-        this._reader = new flexbuffers.BinaryReader(buffer);
-    }
-
-    read() {
-        const end = this._reader.length;
-        if (end < 3) {
-            throw new flexbuffers.Error('Invalid buffer size.');
-        }
-        const byteWidth = this._reader.uint(end - 1, 1);
-        if (byteWidth > 8) {
-            throw new flexbuffers.Error('Invalid byte size.');
-        }
-        const packedType = this._reader.uint(end - 2, 1);
-        const reference = new flexbuffers.Reference(this._reader, end - 2 - byteWidth, byteWidth, 1 << (packedType & 3), packedType >> 2);
-        return reference.read();
-    }
-};
-
-flexbuffers.Reference = class {
-
-    constructor(reader, offset, parentWidth, byteWidth, type) {
-        this._reader = reader;
-        this._offset = offset;
-        this._parentWidth = parentWidth;
-        this._byteWidth = byteWidth;
-        this._type = type;
-    }
-
-    read() {
-        switch (this._type) {
-            case 0x00:   // null
-                return null;
-            case 0x01:   // int
-                return this._reader.int(this._offset, this._parentWidth);
-            case 0x02:   // uint
-                return this._reader.uint(this._offset, this._parentWidth);
-            case 0x03:   // float
-                return this._reader.float(this._offset, this._parentWidth);
-            case 0x04: { // key
-                return this._reader.string(this._indirect());
-            }
-            case 0x05: { // string
-                const offset = this._indirect();
-                const size = this._reader.uint(offset - this._byteWidth, this._byteWidth);
-                return this._reader.string(offset, size);
-            }
-            case 0x06: // indirect int
-                return this._reader.int(this._indirect(), this._byteWidth);
-            case 0x07: // indirect uint
-                return this._reader.uint(this._indirect(), this._byteWidth);
-            case 0x08:   // indirect float
-                return this._reader.float(this._indirect(), this._byteWidth);
-            case 0x09: { // map
-                const offset = this._indirect();
-                const keysOffset = offset - (this._byteWidth * 3);
-                const keysVectorOffset = keysOffset - this._reader.uint(keysOffset, this._byteWidth);
-                const keysByteWidth = this._reader.uint(keysOffset + this._byteWidth, this._byteWidth);
-                const keys = this._typedVector(keysVectorOffset, keysByteWidth, 0x04);
-                const values = this._vector(offset, this._byteWidth);
-                const map = {};
-                for (let i = 0; i < keys.length; i++) {
-                    map[keys[i]] = values[i];
-                }
-                return map;
-            }
-            case 0x0a: { // vector
-                return this._vector(this._indirect(), this._byteWidth);
-            }
-            case 0x0b:   // vector int
-            case 0x0c:   // vector uint
-            case 0x0d:   // vector float
-            case 0x0e:   // vector key
-            case 0x0f:   // vector string deprecated
-            case 0x24: { // vector bool
-                return this._typedVector(this._indirect(), this._byteWidth, this._type - 0x0b + 0x01);
-            }
-            case 0x10:   // vector int2
-            case 0x11:   // vector uint2
-            case 0x12:   // vector float2
-            case 0x13:   // vector int3
-            case 0x14:   // vector uint3
-            case 0x15:   // vector float3
-            case 0x16:   // vector int4
-            case 0x17:   // vector uint4
-            case 0x18: { // vector float4
-                const offset = this._indirect();
-                const size = (((this._type - 0x10) / 3) >> 0) + 2;
-                const type = ((this._type - 0x10) % 3) + 0x01;
-                return this._typedVector(offset, this._byteWidth, type, size);
-            }
-            case 0x19: { // blob
-                const offset = this._indirect();
-                const size = this._reader.uint(offset - this._byteWidth, this._byteWidth);
-                return this._reader.bytes(offset, size);
-            }
-            case 0x1a: { // bool
-                return this._reader.uint(this._offset, this._parentWidth) !== 0;
-            }
-        }
-        return undefined;
-    }
-
-    _indirect() {
-        return this._offset - this._reader.uint(this._offset, this._parentWidth);
-    }
-
-    _vector(offset, byteWidth) {
-        const size = this._reader.uint(offset - byteWidth, byteWidth);
-        const packedTypeOffset = offset + (size * byteWidth);
-        const vector = new Array(size);
-        for (let i = 0; i < size; i++) {
-            const packedType = this._reader.uint(packedTypeOffset + i, 1);
-            const reference = new flexbuffers.Reference(this._reader, offset + (i * byteWidth), byteWidth, 1 << (packedType & 3), packedType >> 2);
-            vector[i] = reference.read();
-        }
-        return vector;
-    }
-
-    _typedVector(offset, byteWidth, type, size) {
-        size = size === undefined ? this._reader.uint(offset - byteWidth, byteWidth) : size;
-        const vector = new Array(size);
-        for (let i = 0; i < size; i++) {
-            const reference = new flexbuffers.Reference(this._reader, offset + (i * byteWidth), byteWidth, 1, type);
-            vector[i] = reference.read();
-        }
-        return vector;
-    }
-};
-
-flexbuffers.BinaryReader = class {
-
-    constructor(buffer) {
-        this._buffer = buffer;
-        this._length = buffer.length;
-        this._view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-        this._utf8Decoder = new TextDecoder('utf-8');
-    }
-
-    get length() {
-        return this._length;
-    }
-
-    int(offset, size) {
-        switch (size) {
-            case 1: return this._view.getInt8(offset);
-            case 2: return this._view.getInt16(offset, true);
-            case 4: return this._view.getInt32(offset, true);
-            case 8: return this._view.getInt64(offset, true);
-        }
-        throw new flexbuffers.Error("Invalid int size '" + size + "'.");
-    }
-
-    uint(offset, size) {
-        switch (size) {
-            case 1: return this._view.getUint8(offset);
-            case 2: return this._view.getUint16(offset, true);
-            case 4: return this._view.getUint32(offset, true);
-            case 8: return this._view.getUint64(offset, true);
-        }
-        throw new flexbuffers.Error("Invalid uint size '" + size + "'.");
-    }
-
-    float(offset, size) {
-        switch (size) {
-            case 4: return this._view.getFloat32(offset, true);
-            case 8: return this._view.getFloat64(offset, true);
-        }
-        throw new flexbuffers.Error("Invalid float size '" + size + "'.");
-    }
-
-    string(offset, size) {
-        let end = size === undefined ? this._buffer.indexOf(0, offset) : offset + size;
-        end = end === -1 ? this._buffer.length : end;
-        const bytes = this._buffer.subarray(offset, end);
-        return this._utf8Decoder.decode(bytes);
-    }
-
-    bytes(offset, size) {
-        return this._buffer.slice(offset, offset + size);
-    }
-};
-
-flexbuffers.Error = class extends Error {
-
-    constructor(message) {
-        super(message);
-        this.name = 'FlexBuffers Error';
-        this.message = message;
     }
 };
 

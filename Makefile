@@ -24,9 +24,11 @@ update: install
 	@./tools/circle sync schema metadata
 	@./tools/cntk sync schema
 	@./tools/coreml sync schema
+	@./tools/dlc schema
 	@./tools/dnn schema
 	@./tools/mnn sync schema
 	@./tools/mslite sync schema metadata
+	@./tools/nnabla sync schema metadata
 	@./tools/onnx sync install schema metadata
 	@./tools/om schema
 	@./tools/paddle sync schema
@@ -37,14 +39,20 @@ update: install
 	@./tools/xmodel sync schema
 
 build_python: install
-	python -m pip install --user wheel
-	python ./publish/setup.py build --version bdist_wheel
+	python -m pip install --user build wheel --quiet
+	rm -rf ./dist/pypi
+	mkdir -p ./dist/pypi/netron
+	cp -R ./source/* ./dist/pypi/netron
+	cp ./publish/setup.py ./dist/pypi
+	rm ./dist/pypi/netron/electron.* ./dist/pypi/netron/app.js
+	python publish/version.py
+	python -m build --no-isolation --wheel --outdir ./dist/pypi dist/pypi
 
 install_python: build_python
-	pip install --force-reinstall --quiet dist/dist/*.whl
+	pip install --force-reinstall dist/pypi/*.whl
 
 build_electron: install
-	CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --universal --publish never
+	npx electron-builder --mac --universal --publish never -c.mac.identity=null
 	npx electron-builder --win --x64 --arm64 --publish never
 	npx electron-builder --linux appimage --x64 --publish never
 	npx electron-builder --linux snap --x64 --publish never
@@ -68,7 +76,7 @@ coverage:
 
 publish_python: build_python
 	python -m pip install --user twine
-	python -m twine upload --non-interactive --skip-existing --verbose dist/dist/*
+	python -m twine upload --non-interactive --skip-existing --verbose dist/pypi/*.whl
 
 publish_electron: install
 	npx electron-builder --mac --universal --publish always
@@ -97,6 +105,8 @@ publish_web: build_web
 	git -C ./dist/gh-pages push --force origin gh-pages
 
 publish_cask:
+	curl -s -H "Authorization: token ${GITHUB_TOKEN}" -X "DELETE" https://api.github.com/repos/${GITHUB_USER}/homebrew-cask 2>&1 > /dev/null
+	sleep 4
 	curl -s -H "Authorization: token $(GITHUB_TOKEN)" https://api.github.com/repos/Homebrew/homebrew-cask/forks -d '' 2>&1 > /dev/null
 	rm -rf ./dist/homebrew-cask
 	sleep 4
@@ -109,6 +119,8 @@ publish_cask:
 	rm -rf ./dist/homebrew-cask
 
 publish_winget:
+	curl -s -H "Authorization: token ${GITHUB_TOKEN}" -X "DELETE" https://api.github.com/repos/${GITHUB_USER}/winget-pkgs 2>&1 > /dev/null
+	sleep 4
 	curl -s -H "Authorization: token $(GITHUB_TOKEN)" https://api.github.com/repos/microsoft/winget-pkgs/forks -d '' 2>&1 > /dev/null
 	rm -rf ./dist/winget-pkgs
 	sleep 4

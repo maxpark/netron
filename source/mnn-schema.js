@@ -1553,7 +1553,7 @@ $root.MNN.OpType = {
     Softmax: 85,
     SpaceToBatchND: 86,
     SpatialProduct: 87,
-    Split: 88,
+    Col2Im: 88,
     Segment: 89,
     Squeeze: 90,
     StridedSlice: 91,
@@ -1608,6 +1608,7 @@ $root.MNN.OpType = {
     TensorArrayErase: 146,
     EyeLike: 147,
     CumSum: 148,
+    Det: 149,
     Plugin: 256,
     Select: 257,
     ZerosLike: 258,
@@ -1818,8 +1819,8 @@ $root.MNN.OpParameter = class {
             case 92: return $root.MNN.LoopParam.decode(reader, position);
             case 93: return $root.MNN.ImageProcessParam.decode(reader, position);
             case 94: return $root.MNN.CumSum.decode(reader, position);
+            default: return undefined;
         }
-        return undefined;
     }
 
     static decodeText(reader, json, type) {
@@ -1918,8 +1919,8 @@ $root.MNN.OpParameter = class {
             case 'LoopParam': return $root.MNN.LoopParam.decodeText(reader, json);
             case 'ImageProcessParam': return $root.MNN.ImageProcessParam.decodeText(reader, json);
             case 'CumSum': return $root.MNN.CumSum.decodeText(reader, json);
+            default: return undefined;
         }
-        return undefined;
     }
 };
 

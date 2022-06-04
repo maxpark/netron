@@ -39,8 +39,9 @@ class Application {
             }
         });
 
-        electron.ipcMain.on('open-file-dialog', () => {
+        electron.ipcMain.on('open-file-dialog', (event) => {
             this._openFileDialog();
+            event.returnValue = null;
         });
 
         electron.ipcMain.on('get-environment', (event) => {
@@ -54,6 +55,7 @@ class Application {
         });
         electron.ipcMain.on('set-configuration', (event, obj) => {
             this._configuration.set(obj.name, obj.value);
+            event.returnValue = null;
         });
         electron.ipcMain.on('drop-paths', (event, data) => {
             const paths = data.paths.filter((path) => {
@@ -64,6 +66,7 @@ class Application {
                 return false;
             });
             this._dropPaths(event.sender, paths);
+            event.returnValue = null;
         });
         electron.ipcMain.on('show-message-box', (event, options) => {
             const owner = event.sender.getOwnerBrowserWindow();
@@ -104,7 +107,7 @@ class Application {
             for (const arg of argv.slice(1)) {
                 if (!arg.startsWith('-') && arg !== path.dirname(__dirname)) {
                     const extension = path.extname(arg).toLowerCase();
-                    if (extension != '' && extension != 'js' && fs.existsSync(arg)) {
+                    if (extension !== '' && extension !== '.js' && fs.existsSync(arg)) {
                         const stat = fs.statSync(arg);
                         if (stat.isFile() || stat.isDirectory()) {
                             this._openPath(arg);
@@ -156,12 +159,12 @@ class Application {
             properties: [ 'openFile' ],
             filters: [
                 { name: 'All Model Files',  extensions: [
-                    'onnx', 'pb',
+                    'onnx', 'ort', 'pb',
                     'h5', 'hd5', 'hdf5', 'json', 'keras',
                     'mlmodel', 'mlpackage',
                     'caffemodel',
-                    'model', 'dnn', 'cmf', 'mar', 'params',
-                    'pdmodel', 'pdparams', 'nb',
+                    'model', 'dnn', 'dlc', 'cmf', 'mar', 'params',
+                    'pdmodel', 'pdiparams', 'pdparams', 'pdopt', 'nb',
                     'meta',
                     'tflite', 'lite', 'tfl',
                     'armnn', 'mnn', 'nn', 'uff', 'uff.txt', 'rknn', 'xmodel', 'kmodel',
@@ -205,7 +208,7 @@ class Application {
     }
 
     _loadPath(path, view) {
-        const recents = this._configuration.get('recents').filter((recent) => path != recent.path);
+        const recents = this._configuration.get('recents').filter((recent) => path !== recent.path);
         view.open(path);
         recents.unshift({ path: path });
         if (recents.length > 9) {
@@ -234,7 +237,7 @@ class Application {
             let defaultPath = 'Untitled';
             const file = view.path;
             const lastIndex = file.lastIndexOf('.');
-            if (lastIndex != -1) {
+            if (lastIndex !== -1) {
                 defaultPath = file.substring(0, lastIndex);
             }
             const owner = electron.BrowserWindow.getFocusedWindow();
@@ -594,7 +597,7 @@ class Application {
             }
         ];
 
-        if (process.platform != 'darwin') {
+        if (process.platform !== 'darwin') {
             helpSubmenu.push({ type: 'separator' });
             helpSubmenu.push({
                 label: 'About ' + electron.app.name,
@@ -628,7 +631,7 @@ class Application {
         });
         commandTable.set('view.toggle-attributes', {
             enabled: (context) => { return context.view && context.view.path ? true : false; },
-            label: (context) => { return !context.view || !context.view.get('attributes') ? 'Hide &Attributes' : 'Show &Attributes'; }
+            label: (context) => { return !context.view || context.view.get('attributes') ? 'Hide &Attributes' : 'Show &Attributes'; }
         });
         commandTable.set('view.toggle-initializers', {
             enabled: (context) => { return context.view && context.view.path ? true : false; },
@@ -667,7 +670,7 @@ class Application {
     }
 
     static minimizePath(file) {
-        if (process.platform != 'win32') {
+        if (process.platform !== 'win32') {
             const homeDir = os.homedir();
             if (file.startsWith(homeDir)) {
                 return '~' + file.substring(homeDir.length);
@@ -903,7 +906,7 @@ class ViewCollection {
     _updateActiveView() {
         const window = electron.BrowserWindow.getFocusedWindow();
         const view = this._views.find(view => view.window == window) || null;
-        if (view != this._activeView) {
+        if (view !== this._activeView) {
             this._activeView = view;
             this._raise('active-view-changed', { activeView: this._activeView });
         }
@@ -1006,7 +1009,7 @@ class MenuService {
             const command = entry[1];
             if (command && command.label) {
                 const label = command.label(context);
-                if (label != menuItem.label) {
+                if (label !== menuItem.label) {
                     if (this._itemTable.has(entry[0])) {
                         this._itemTable.get(entry[0]).label = label;
                         rebuild = true;

@@ -333,7 +333,8 @@
   {
     "name": "BatchNormGrad",
     "attributes": [
-      { "name": "epsilon", "type": "float32", "default": 0 }
+      { "name": "epsilon", "type": "float32", "default": 0 },
+      { "name": "is_training", "type": "boolean", "default": false }
     ]
   },
   {
@@ -703,6 +704,7 @@
   },
   {
     "name": "Crop",
+    "category": "Data",
     "attributes": [
       { "name": "axis", "type": "int64", "default": 0 },
       { "name": "offsets", "type": "int64[]", "default": 0 }
@@ -1202,6 +1204,13 @@
     ]
   },
   {
+    "name": "FormatTranspose",
+    "attributes": [
+      { "name": "src_format", "type": "Format", "default": "NHWC" },
+      { "name": "dst_format", "type": "Format", "default": "NHWC" }
+    ]
+  },
+  {
     "name": "FullConnection",
     "category": "Layer",
     "attributes": [
@@ -1260,6 +1269,9 @@
     "outputs": [
       { "name": "output" }
     ]
+  },
+  {
+    "name": "GatherD"
   },
   {
     "name": "GatherNd",
@@ -1950,6 +1962,18 @@
     ]
   },
   {
+    "name": "NLLLoss",
+    "attributes": [
+      { "name": "reduction", "type": "Reduction", "default": "REDUCTION_SUM" }
+    ]
+  },
+  {
+    "name": "NLLLossGrad",
+    "attributes": [
+      { "name": "reduction", "type": "Reduction", "default": "REDUCTION_SUM" }
+    ]
+  },
+  {
     "name": "NonMaxSuppression",
     "attributes": [
       { "name": "centerPointBox", "type": "int32", "default": 0 },
@@ -2209,6 +2233,14 @@
   },
   {
     "name": "RaggedRange"
+  },
+  {
+    "name": "RandomNormal",
+    "attributes": [
+      { "name": "seed", "type": "float32", "default": 0 },
+      { "name": "mean", "type": "float32", "default": 0 },
+      { "name": "scale", "type": "float32", "default": 0 }
+    ]
   },
   {
     "name": "RandomStandardNormal",
@@ -3032,6 +3064,7 @@
   },
   {
     "name": "Upsample",
+    "category": "Data",
     "attributes": [
       { "name": "mode", "type": "string" },
       { "name": "scales", "type": "float32[]" }

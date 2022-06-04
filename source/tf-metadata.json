@@ -2169,6 +2169,73 @@
     ]
   },
   {
+    "name": "ApproxTopK",
+    "summary": "Returns min/max k values and their indices of the input operand in an approximate manner.",
+    "description": "Returns min/max k values and their indices of the input operand in an approximate manner.",
+    "attributes": [
+      {
+        "name": "k",
+        "type": "int64",
+        "description": "Specifies the number of min/max-k.",
+        "minimum": 0
+      },
+      {
+        "name": "reduction_dimension",
+        "type": "int64",
+        "description": "Integer dimension along which to search. Default: -1.",
+        "default": -1
+      },
+      {
+        "name": "recall_target",
+        "type": "float32",
+        "description": "Recall target for the approximation. Range in (0,1]",
+        "default": 0.949999988079071
+      },
+      {
+        "name": "is_max_k",
+        "type": "boolean",
+        "description": "When true, computes max-k; otherwise computes min-k.",
+        "default": true
+      },
+      {
+        "name": "reduction_input_size_override",
+        "type": "int64",
+        "description": "When set to a positive value, it overrides the size determined by\n`input[reduction_dim]` for evaluating the recall. This option is useful when\nthe given `input` is only a subset of the overall computation in SPMD or\ndistributed pipelines, where the true input size cannot be deferred by the\n`input` shape.",
+        "default": -1
+      },
+      {
+        "name": "aggregate_to_topk",
+        "type": "boolean",
+        "description": "When true, aggregates approximate results to top-k. When false, returns the\napproximate results. The number of the approximate results is implementation\ndefined and is greater equals to the specified `k`.",
+        "default": true
+      },
+      {
+        "name": "T",
+        "type": "type",
+        "description": "Must be one of the following: `float16`, `bfloat16`, `float32`."
+      }
+    ],
+    "inputs": [
+      {
+        "name": "input",
+        "description": "Array to search. Must be at least 1-D of the floating type",
+        "typeAttr": "T"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "values",
+        "description": "The min/max k values along the `reduction_dimension` of the `input` operand.\nThe dimension are the same as the `input` operand except for the\n`reduction_dimension`: when `aggregate_to_topk` is true, the reduction\ndimension is `k`; otherwise, it is greater equals to `k` where the size is\nimplementation-defined.",
+        "typeAttr": "T"
+      },
+      {
+        "name": "indices",
+        "description": "The indices of `values` along the `reduction_dimension` of the `input` operand.",
+        "type": 3
+      }
+    ]
+  },
+  {
     "name": "ApproximateEqual",
     "summary": "Returns the truth value of abs(x-y) < tolerance element-wise.",
     "attributes": [
@@ -2482,6 +2549,41 @@
       {
         "name": "transformations",
         "description": "A `tf.string` vector `tf.Tensor` identifying the transformations that are\nexpected to happen next.",
+        "type": 7
+      }
+    ],
+    "outputs": [
+      {
+        "name": "handle",
+        "type": 21
+      }
+    ]
+  },
+  {
+    "name": "AssertPrevDataset",
+    "summary": "A transformation that asserts which transformations happened previously.",
+    "description": "This transformation checks the names and, optionally, the attribute name-value\npairs in the `transformations` argument against those of the transformations\nthat preceded this transformation.  If there is a mismatch, the transformation\nraises an exception.\n\nThe check occurs when iterating over the contents of the dataset, which\nmeans that the check happens *after* any static optimizations are applied\nto the dataset graph.",
+    "attributes": [
+      {
+        "name": "output_types",
+        "type": "type[]",
+        "minimum": 1
+      },
+      {
+        "name": "output_shapes",
+        "type": "shape[]",
+        "minimum": 1
+      }
+    ],
+    "inputs": [
+      {
+        "name": "input_dataset",
+        "description": "A variant tensor representing the input dataset.\n`AssertPrevDataset` passes through the outputs of its input dataset.",
+        "type": 21
+      },
+      {
+        "name": "transformations",
+        "description": "A `tf.string` vector `tf.Tensor` identifying the transformations, with optional\nattribute name-value pairs, that are expected to have happened previously.",
         "type": 7
       }
     ],
@@ -6915,7 +7017,7 @@
   {
     "name": "BroadcastTo",
     "summary": "Broadcast an array for a compatible shape.",
-    "description": "Broadcasting is the process of making arrays to have compatible shapes\nfor arithmetic operations. Two shapes are compatible if for each\ndimension pair they are either equal or one of them is one. When trying\nto broadcast a Tensor to a shape, it starts with the trailing dimensions,\nand works its way forward.\n\nFor example,\n\n>>> x = tf.constant([1, 2, 3])\n>>> y = tf.broadcast_to(x, [3, 3])\n>>> print(y)\ntf.Tensor(\n    [[1 2 3]\n     [1 2 3]\n     [1 2 3]], shape=(3, 3), dtype=int32)\n\nIn the above example, the input Tensor with the shape of `[1, 3]`\nis broadcasted to output Tensor with shape of `[3, 3]`.\n\nWhen doing broadcasted operations such as multiplying a tensor\nby a scalar, broadcasting (usually) confers some time or space\nbenefit, as the broadcasted tensor is never materialized.\n\nHowever, `broadcast_to` does not carry with it any such benefits.\nThe newly-created tensor takes the full memory of the broadcasted\nshape. (In a graph context, `broadcast_to` might be fused to\nsubsequent operation and then be optimized away, however.)",
+    "description": "Broadcasting is the process of making arrays to have compatible shapes\nfor arithmetic operations. Two shapes are compatible if for each\ndimension pair they are either equal or one of them is one.\n\nFor example:\n\n>>> x = tf.constant([[1, 2, 3]])   # Shape (1, 3,)\n>>> y = tf.broadcast_to(x, [2, 3])\n>>> print(y)\ntf.Tensor(\n    [[1 2 3]\n     [1 2 3]], shape=(2, 3), dtype=int32)\n\nIn the above example, the input Tensor with the shape of `[1, 3]`\nis broadcasted to output Tensor with shape of `[2, 3]`.\n\nWhen broadcasting, if a tensor has fewer axes than necessary its shape is\npadded on the left with ones. So this gives the same result as the previous\nexample:\n\n>>> x = tf.constant([1, 2, 3])   # Shape (3,)\n>>> y = tf.broadcast_to(x, [2, 3])\n\n\nWhen doing broadcasted operations such as multiplying a tensor\nby a scalar, broadcasting (usually) confers some time or space\nbenefit, as the broadcasted tensor is never materialized.\n\nHowever, `broadcast_to` does not carry with it any such benefits.\nThe newly-created tensor takes the full memory of the broadcasted\nshape. (In a graph context, `broadcast_to` might be fused to\nsubsequent operation and then be optimized away, however.)",
     "attributes": [
       {
         "name": "T",
@@ -7973,6 +8075,34 @@
     ]
   },
   {
+    "name": "CollectiveAssignGroupV2",
+    "summary": "Assign group keys based on group assignment.",
+    "inputs": [
+      {
+        "name": "group_assignment",
+        "type": 3
+      },
+      {
+        "name": "device_index",
+        "type": 3
+      },
+      {
+        "name": "base_key",
+        "type": 3
+      }
+    ],
+    "outputs": [
+      {
+        "name": "group_size",
+        "type": 3
+      },
+      {
+        "name": "group_key",
+        "type": 3
+      }
+    ]
+  },
+  {
     "name": "CollectiveBcastRecv",
     "summary": "Receives a tensor value broadcast from another device.",
     "attributes": [
@@ -9012,6 +9142,17 @@
     ]
   },
   {
+    "name": "ConfigureAndInitializeGlobalTPU",
+    "summary": "An op that sets up the centralized structures for a distributed TPU system.",
+    "outputs": [
+      {
+        "name": "output",
+        "description": "A vector containing the global TPU id of each TPU on the host.",
+        "type": 3
+      }
+    ]
+  },
+  {
     "name": "ConfigureDistributedTPU",
     "summary": "Sets up the centralized structures for a distributed TPU system.",
     "attributes": [
@@ -9755,6 +9896,36 @@
       {
         "name": "input",
         "description": "Input tensor.",
+        "typeAttr": "T"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "typeAttr": "T"
+      }
+    ]
+  },
+  {
+    "name": "CopyToMesh",
+    "attributes": [
+      {
+        "name": "layout",
+        "type": "string"
+      },
+      {
+        "name": "source_layout",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "name": "T",
+        "type": "type"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "input",
         "typeAttr": "T"
       }
     ],
@@ -11299,6 +11470,86 @@
     ]
   },
   {
+    "name": "DTensorRestoreV2",
+    "attributes": [
+      {
+        "name": "input_shapes",
+        "type": "shape[]"
+      },
+      {
+        "name": "input_layouts",
+        "type": "string[]"
+      },
+      {
+        "name": "dtypes",
+        "type": "type[]",
+        "minimum": 1
+      }
+    ],
+    "inputs": [
+      {
+        "name": "prefix",
+        "type": 7
+      },
+      {
+        "name": "tensor_names",
+        "type": 7
+      },
+      {
+        "name": "shape_and_slices",
+        "type": 7
+      }
+    ],
+    "outputs": [
+      {
+        "name": "tensors",
+        "typeListAttr": "dtypes"
+      }
+    ]
+  },
+  {
+    "name": "DTensorShardedPrefix",
+    "attributes": [
+      {
+        "name": "dtypes",
+        "type": "type[]",
+        "minimum": 1
+      }
+    ],
+    "inputs": [
+      {
+        "name": "prefix",
+        "type": 7
+      },
+      {
+        "name": "tensor_names",
+        "type": 7
+      },
+      {
+        "name": "shape_and_slices",
+        "type": 7
+      },
+      {
+        "name": "mesh",
+        "type": 7
+      },
+      {
+        "name": "layouts",
+        "type": 7
+      },
+      {
+        "name": "tensors",
+        "typeListAttr": "dtypes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "type": 7
+      }
+    ]
+  },
+  {
     "name": "DataFormatDimMap",
     "summary": "Returns the dimension index in the destination data format given the one in",
     "description": "the source data format.",
@@ -11343,7 +11594,7 @@
   {
     "name": "DataFormatVecPermute",
     "summary": "Permute input tensor from `src_format` to `dst_format`.",
-    "description": "Input tensor must be a vector of size 4, or a 4x2 tensor.\n\nFor example, with `src_format` of `NHWC`, `dst_format` of `NCHW`, and inputs:\n```\n[1, 2, 3, 4]\n```\nand\n```\n[[1, 2, 3, 4],\n [5, 6, 7, 8]]\n```\n, the outputs will be (respectively):\n```\n[1, 4, 2, 3]\n```\nand\n```\n[[1, 4, 2, 3],\n [5, 8, 6, 7]]\n```",
+    "description": "Given source and destination format strings of length n=4 or 5, the input\ntensor must be a vector of size n or n-2, or a 2D tensor of shape\n(n, 2) or (n-2, 2).\n\nIf the first dimension of the input tensor is n-2, it is assumed that\nnon-spatial dimensions are omitted (i.e `N`, `C`).\n\nFor example, with `src_format` of `NHWC`, `dst_format` of `NCHW`, and input:\n```\n[1, 2, 3, 4]\n```\n, the output will be:\n```\n[1, 4, 2, 3]\n```\nWith `src_format` of `NDHWC`, `dst_format` of `NCDHW`, and input:\n```\n[[1, 6], [2, 7], [3, 8], [4, 9], [5, 10]]\n```\n, the output will be:\n```\n[[1, 6], [5, 10], [2, 7], [3, 8], [4, 9]]\n```\nWith `src_format` of `NHWC`, `dst_format` of `NCHW`, and input:\n```\n[1, 2]\n```\n, the output will be:\n```\n[1, 2]\n```",
     "attributes": [
       {
         "name": "T",
@@ -11370,14 +11621,14 @@
     "inputs": [
       {
         "name": "x",
-        "description": "Vector of size 4 or Tensor of shape (4, 2) in source data format.",
+        "description": "Tensor of rank 1 or 2 in source data format.",
         "typeAttr": "T"
       }
     ],
     "outputs": [
       {
         "name": "y",
-        "description": "Vector of size 4 or Tensor of shape (4, 2) in destination data format.",
+        "description": "Tensor of rank 1 or 2 in destination data format.",
         "typeAttr": "T"
       }
     ]
@@ -11410,6 +11661,11 @@
         "name": "target_workers",
         "type": "string",
         "default": "AUTO"
+      },
+      {
+        "name": "cross_trainer_cache_options",
+        "type": "string",
+        "default": ""
       }
     ],
     "inputs": [
@@ -11477,6 +11733,11 @@
         "name": "target_workers",
         "type": "string",
         "default": "AUTO"
+      },
+      {
+        "name": "cross_trainer_cache_options",
+        "type": "string",
+        "default": ""
       }
     ],
     "inputs": [
@@ -11561,6 +11822,11 @@
       {
         "name": "uncompress_fn",
         "type": "function"
+      },
+      {
+        "name": "cross_trainer_cache_options",
+        "type": "string",
+        "default": ""
       }
     ],
     "inputs": [
@@ -13049,7 +13315,7 @@
   {
     "name": "DepthToSpace",
     "summary": "DepthToSpace for tensors of type T.",
-    "description": "Rearranges data from depth into blocks of spatial data.\nThis is the reverse transformation of SpaceToDepth. More specifically,\nthis op outputs a copy of the input tensor where values from the `depth`\ndimension are moved in spatial blocks to the `height` and `width` dimensions.\nThe attr `block_size` indicates the input block size and how the data is moved.\n\n  * Chunks of data of size `block_size * block_size` from depth are rearranged\n    into non-overlapping blocks of size `block_size x block_size`\n  * The width the output tensor is `input_depth * block_size`, whereas the\n    height is `input_height * block_size`.\n  * The Y, X coordinates within each block of the output image are determined\n    by the high order component of the input channel index.\n  * The depth of the input tensor must be divisible by\n    `block_size * block_size`.\n\nThe `data_format` attr specifies the layout of the input and output tensors\nwith the following options:\n  \"NHWC\": `[ batch, height, width, channels ]`\n  \"NCHW\": `[ batch, channels, height, width ]`\n  \"NCHW_VECT_C\":\n      `qint8 [ batch, channels / 4, height, width, 4 ]`\n\nIt is useful to consider the operation as transforming a 6-D Tensor.\ne.g. for data_format = NHWC,\n     Each element in the input tensor can be specified via 6 coordinates,\n     ordered by decreasing memory layout significance as:\n     n,iY,iX,bY,bX,oC  (where n=batch index, iX, iY means X or Y coordinates\n                        within the input image, bX, bY means coordinates\n                        within the output block, oC means output channels).\n     The output would be the input transposed to the following layout:\n     n,iY,bY,iX,bX,oC\n\nThis operation is useful for resizing the activations between convolutions\n(but keeping all data), e.g. instead of pooling. It is also useful for training\npurely convolutional models.\n\nFor example, given an input of shape `[1, 1, 1, 4]`, data_format = \"NHWC\" and\nblock_size = 2:\n\n```\nx = [[[[1, 2, 3, 4]]]]\n\n```\n\nThis operation will output a tensor of shape `[1, 2, 2, 1]`:\n\n```\n   [[[[1], [2]],\n     [[3], [4]]]]\n```\n\nHere, the input has a batch of 1 and each batch element has shape `[1, 1, 4]`,\nthe corresponding output will have 2x2 elements and will have a depth of\n1 channel (1 = `4 / (block_size * block_size)`).\nThe output element shape is `[2, 2, 1]`.\n\nFor an input tensor with larger depth, here of shape `[1, 1, 1, 12]`, e.g.\n\n```\nx = [[[[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]]]]\n```\n\nThis operation, for block size of 2, will return the following tensor of shape\n`[1, 2, 2, 3]`\n\n```\n   [[[[1, 2, 3], [4, 5, 6]],\n     [[7, 8, 9], [10, 11, 12]]]]\n\n```\n\nSimilarly, for the following input of shape `[1 2 2 4]`, and a block size of 2:\n\n```\nx =  [[[[1, 2, 3, 4],\n       [5, 6, 7, 8]],\n      [[9, 10, 11, 12],\n       [13, 14, 15, 16]]]]\n```\n\nthe operator will return the following tensor of shape `[1 4 4 1]`:\n\n```\nx = [[[ [1],   [2],  [5],  [6]],\n      [ [3],   [4],  [7],  [8]],\n      [ [9],  [10], [13],  [14]],\n      [ [11], [12], [15],  [16]]]]\n\n```",
+    "description": "Rearranges data from depth into blocks of spatial data.\nThis is the reverse transformation of SpaceToDepth. More specifically,\nthis op outputs a copy of the input tensor where values from the `depth`\ndimension are moved in spatial blocks to the `height` and `width` dimensions.\nThe attr `block_size` indicates the input block size and how the data is moved.\n\n  * Chunks of data of size `block_size * block_size` from depth are rearranged\n    into non-overlapping blocks of size `block_size x block_size`\n  * The width of the output tensor is `input_depth * block_size`, whereas the\n    height is `input_height * block_size`.\n  * The Y, X coordinates within each block of the output image are determined\n    by the high order component of the input channel index.\n  * The depth of the input tensor must be divisible by\n    `block_size * block_size`.\n\nThe `data_format` attr specifies the layout of the input and output tensors\nwith the following options:\n  \"NHWC\": `[ batch, height, width, channels ]`\n  \"NCHW\": `[ batch, channels, height, width ]`\n  \"NCHW_VECT_C\":\n      `qint8 [ batch, channels / 4, height, width, 4 ]`\n\nIt is useful to consider the operation as transforming a 6-D Tensor.\ne.g. for data_format = NHWC,\n     Each element in the input tensor can be specified via 6 coordinates,\n     ordered by decreasing memory layout significance as:\n     n,iY,iX,bY,bX,oC  (where n=batch index, iX, iY means X or Y coordinates\n                        within the input image, bX, bY means coordinates\n                        within the output block, oC means output channels).\n     The output would be the input transposed to the following layout:\n     n,iY,bY,iX,bX,oC\n\nThis operation is useful for resizing the activations between convolutions\n(but keeping all data), e.g. instead of pooling. It is also useful for training\npurely convolutional models.\n\nFor example, given an input of shape `[1, 1, 1, 4]`, data_format = \"NHWC\" and\nblock_size = 2:\n\n```\nx = [[[[1, 2, 3, 4]]]]\n\n```\n\nThis operation will output a tensor of shape `[1, 2, 2, 1]`:\n\n```\n   [[[[1], [2]],\n     [[3], [4]]]]\n```\n\nHere, the input has a batch of 1 and each batch element has shape `[1, 1, 4]`,\nthe corresponding output will have 2x2 elements and will have a depth of\n1 channel (1 = `4 / (block_size * block_size)`).\nThe output element shape is `[2, 2, 1]`.\n\nFor an input tensor with larger depth, here of shape `[1, 1, 1, 12]`, e.g.\n\n```\nx = [[[[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]]]]\n```\n\nThis operation, for block size of 2, will return the following tensor of shape\n`[1, 2, 2, 3]`\n\n```\n   [[[[1, 2, 3], [4, 5, 6]],\n     [[7, 8, 9], [10, 11, 12]]]]\n\n```\n\nSimilarly, for the following input of shape `[1 2 2 4]`, and a block size of 2:\n\n```\nx =  [[[[1, 2, 3, 4],\n       [5, 6, 7, 8]],\n      [[9, 10, 11, 12],\n       [13, 14, 15, 16]]]]\n```\n\nthe operator will return the following tensor of shape `[1 4 4 1]`:\n\n```\nx = [[[ [1],   [2],  [5],  [6]],\n      [ [3],   [4],  [7],  [8]],\n      [ [9],  [10], [13],  [14]],\n      [ [11], [12], [15],  [16]]]]\n\n```",
     "attributes": [
       {
         "name": "T",
@@ -13763,6 +14029,18 @@
       {
         "name": "handle",
         "type": 21
+      }
+    ]
+  },
+  {
+    "name": "DisableCopyOnRead",
+    "summary": "Turns off the copy-on-read mode.",
+    "description": "Turns off the copy-on-read mode of a resource variable. If the variable is not in copy-on-read mode, this op has no effect.  ",
+    "inputs": [
+      {
+        "name": "resource",
+        "description": "The resource handle of the resource variable.",
+        "type": 20
       }
     ]
   },
@@ -29501,6 +29779,66 @@
     ]
   },
   {
+    "name": "ParallelFilterDataset",
+    "summary": "Creates a dataset containing elements of `input_dataset` matching `predicate`.",
+    "description": "The `predicate` function must return a scalar boolean and accept the\nfollowing arguments:\n\n* One tensor for each component of an element of `input_dataset`.\n* One tensor for each value in `other_arguments`.\n\nUnlike a \"FilterDataset\", which applies `predicate` sequentially, this dataset\ninvokes up to `num_parallel_calls` copies of `predicate` in parallel.\n  ",
+    "attributes": [
+      {
+        "name": "predicate",
+        "type": "function",
+        "description": "A function returning a scalar boolean."
+      },
+      {
+        "name": "deterministic",
+        "type": "string",
+        "description": "A string indicating the op-level determinism to use. Deterministic controls\nwhether the interleave is allowed to return elements out of order if the next\nelement to be returned isn't available, but a later element is. Options are\n\"true\", \"false\", and \"default\". \"default\" indicates that determinism should be\ndecided by the `experimental_deterministic` parameter of `tf.data.Options`.",
+        "default": "default"
+      },
+      {
+        "name": "Targuments",
+        "type": "type[]",
+        "minimum": 0
+      },
+      {
+        "name": "output_types",
+        "type": "type[]",
+        "minimum": 1
+      },
+      {
+        "name": "output_shapes",
+        "type": "shape[]",
+        "minimum": 1
+      },
+      {
+        "name": "metadata",
+        "type": "string",
+        "default": ""
+      }
+    ],
+    "inputs": [
+      {
+        "name": "input_dataset",
+        "type": 21
+      },
+      {
+        "name": "other_arguments",
+        "description": "A list of tensors, typically values that were captured when\nbuilding a closure for `predicate`.",
+        "typeListAttr": "Targuments"
+      },
+      {
+        "name": "num_parallel_calls",
+        "description": "The number of concurrent invocations of `predicate` that process\nelements from `input_dataset` in parallel.",
+        "type": 9
+      }
+    ],
+    "outputs": [
+      {
+        "name": "handle",
+        "type": 21
+      }
+    ]
+  },
+  {
     "name": "ParallelInterleaveDataset",
     "summary": "Creates a dataset that applies `f` to the outputs of `input_dataset`.",
     "description": "The resulting dataset is similar to the `InterleaveDataset`, with the exception\nthat if retrieving the next value from a dataset would cause the requester to\nblock, it will skip that input dataset. This dataset is especially useful\nwhen loading data from a variable-latency datastores (e.g. HDFS, GCS), as it\nallows the training step to proceed so long as some data is available.\n\n!! WARNING !! If the `sloppy` parameter is set to `True`, the operation of this\ndataset will not be deterministic!\n\nThis dataset has been superseded by `ParallelInterleaveDatasetV2`.  New code\nshould use `ParallelInterleaveDatasetV2`.\n\nThe Python API `tf.data.experimental.parallel_interleave` creates instances of\nthis op. `tf.data.experimental.parallel_interleave` is a deprecated API.",
@@ -36604,6 +36942,47 @@
     ]
   },
   {
+    "name": "RandomIndexShuffle",
+    "summary": "Outputs the position of `value` in a permutation of [0, ..., max_index].",
+    "description": "Output values are a bijection of the `index` for any combination and `seed` and `max_index`.\n\nIf multiple inputs are vectors (matrix in case of seed) then the size of the\nfirst dimension must match.\n\nThe outputs are deterministic.",
+    "attributes": [
+      {
+        "name": "dtype",
+        "type": "type",
+        "description": "The dtype of the input and output. Must be one of the following: `int32`, `uint32`, `int64`, `uint64`."
+      },
+      {
+        "name": "Tseed",
+        "type": "type",
+        "description": "The type of `seed`. Must be one of the following: `int32`, `uint32`, `int64`, `uint64`."
+      }
+    ],
+    "inputs": [
+      {
+        "name": "index",
+        "description": "A scalar tensor or a vector of dtype `dtype`. The index (or indices) to be shuffled. Must be within [0, max_index].",
+        "typeAttr": "dtype"
+      },
+      {
+        "name": "seed",
+        "description": "A tensor of dtype `Tseed` and shape [3] or [n, 3]. The random seed.",
+        "typeAttr": "Tseed"
+      },
+      {
+        "name": "max_index",
+        "description": "A scalar tensor or vector of dtype `dtype`. The upper bound(s) of the interval (inclusive).",
+        "typeAttr": "dtype"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "description": "A scalar tensor of dtype `dtype`, within [0, max_index]. The randomly shuffled index.",
+        "typeAttr": "dtype"
+      }
+    ]
+  },
+  {
     "name": "RandomPoisson",
     "summary": "Use RandomPoissonV2 instead.",
     "attributes": [
@@ -37065,6 +37444,11 @@
         "name": "metadata",
         "type": "string",
         "default": ""
+      },
+      {
+        "name": "replicate_on_split",
+        "type": "boolean",
+        "default": false
       }
     ],
     "inputs": [
@@ -38245,6 +38629,31 @@
       {
         "name": "dataset_id",
         "type": 9
+      }
+    ]
+  },
+  {
+    "name": "Relayout",
+    "attributes": [
+      {
+        "name": "layout",
+        "type": "string"
+      },
+      {
+        "name": "T",
+        "type": "type"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "input",
+        "typeAttr": "T"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "typeAttr": "T"
       }
     ]
   },
@@ -42413,6 +42822,37 @@
     ]
   },
   {
+    "name": "RewriteDataset",
+    "attributes": [
+      {
+        "name": "output_types",
+        "type": "type[]",
+        "minimum": 1
+      },
+      {
+        "name": "output_shapes",
+        "type": "shape[]",
+        "minimum": 1
+      }
+    ],
+    "inputs": [
+      {
+        "name": "input_dataset",
+        "type": 21
+      },
+      {
+        "name": "rewrite_name",
+        "type": 7
+      }
+    ],
+    "outputs": [
+      {
+        "name": "handle",
+        "type": 21
+      }
+    ]
+  },
+  {
     "name": "RightShift",
     "summary": "Elementwise computes the bitwise right-shift of `x` and `y`.",
     "description": "Performs a logical shift for unsigned integer types, and an arithmetic shift\nfor signed integer types.\n\nIf `y` is negative, or greater than or equal to than the width of `x` in bits\nthe result is implementation defined.\n\nExample:\n\n```python\nimport tensorflow as tf\nfrom tensorflow.python.ops import bitwise_ops\nimport numpy as np\ndtype_list = [tf.int8, tf.int16, tf.int32, tf.int64]\n\nfor dtype in dtype_list:\n  lhs = tf.constant([-1, -5, -3, -14], dtype=dtype)\n  rhs = tf.constant([5, 0, 7, 11], dtype=dtype)\n\n  right_shift_result = bitwise_ops.right_shift(lhs, rhs)\n\n  print(right_shift_result)\n\n# This will print:\n# tf.Tensor([-1 -5 -1 -1], shape=(4,), dtype=int8)\n# tf.Tensor([-1 -5 -1 -1], shape=(4,), dtype=int16)\n# tf.Tensor([-1 -5 -1 -1], shape=(4,), dtype=int32)\n# tf.Tensor([-1 -5 -1 -1], shape=(4,), dtype=int64)\n\nlhs = np.array([-2, 64, 101, 32], dtype=np.int8)\nrhs = np.array([-1, -5, -3, -14], dtype=np.int8)\nbitwise_ops.right_shift(lhs, rhs)\n# <tf.Tensor: shape=(4,), dtype=int8, numpy=array([ -2,  64, 101,  32], dtype=int8)>\n```\n",
@@ -44937,7 +45377,7 @@
   {
     "name": "ScatterNd",
     "summary": "Scatters `updates` into a tensor of shape `shape` according to `indices`.",
-    "description": "Update the input tensor by scattering sparse `updates` according to individual values at the specified `indices`.\nThis op returns an `output` tensor with the `shape` you specify. This op is the\ninverse of the `tf.gather_nd` operator which extracts values or slices from a\ngiven tensor.\n\nThis operation is similar to `tf.tensor_scatter_nd_add`, except that the tensor\nis zero-initialized. Calling `tf.scatter_nd(indices, values, shape)`\nis identical to calling\n`tf.tensor_scatter_nd_add(tf.zeros(shape, values.dtype), indices, values)`\n\nIf `indices` contains duplicates, the duplicate `values` are accumulated\n(summed).\n\n**WARNING**: The order in which updates are applied is nondeterministic, so the\noutput will be nondeterministic if `indices` contains duplicates;\nnumbers summed in different order may yield different results because of some\nnumerical approximation issues.\n\n`indices` is an integer tensor of shape `shape`. The last dimension\nof `indices` can be at most the rank of `shape`:\n\n    indices.shape[-1] <= shape.rank\n\nThe last dimension of `indices` corresponds to indices of elements\n(if `indices.shape[-1] = shape.rank`) or slices\n(if `indices.shape[-1] < shape.rank`) along dimension `indices.shape[-1]` of\n`shape`.\n\n`updates` is a tensor with shape:\n\n    indices.shape[:-1] + shape[indices.shape[-1]:]\n\nThe simplest form of the scatter op is to insert individual elements in\na tensor by index. Consider an example where you want to insert 4 scattered\nelements in a rank-1 tensor with 8 elements.\n\n<div style=\"width:70%; margin:auto; margin-bottom:10px; margin-top:20px;\">\n<img style=\"width:100%\" src=\"https://www.tensorflow.org/images/ScatterNd1.png\" alt>\n</div>\n\nIn Python, this scatter operation would look like this:\n\n```python\n    indices = tf.constant([[4], [3], [1], [7]])\n    updates = tf.constant([9, 10, 11, 12])\n    shape = tf.constant([8])\n    scatter = tf.scatter_nd(indices, updates, shape)\n    print(scatter)\n```\n\nThe resulting tensor would look like this:\n\n    [0, 11, 0, 10, 9, 0, 0, 12]\n\nYou can also insert entire slices of a higher rank tensor all at once. For\nexample, you can insert two slices in the first dimension of a rank-3 tensor\nwith two matrices of new values.\n\n<div style=\"width:70%; margin:auto; margin-bottom:10px; margin-top:20px;\">\n<img style=\"width:100%\" src=\"https://www.tensorflow.org/images/ScatterNd2.png\" alt>\n</div>\n\nIn Python, this scatter operation would look like this:\n\n```python\n    indices = tf.constant([[0], [2]])\n    updates = tf.constant([[[5, 5, 5, 5], [6, 6, 6, 6],\n                            [7, 7, 7, 7], [8, 8, 8, 8]],\n                           [[5, 5, 5, 5], [6, 6, 6, 6],\n                            [7, 7, 7, 7], [8, 8, 8, 8]]])\n    shape = tf.constant([4, 4, 4])\n    scatter = tf.scatter_nd(indices, updates, shape)\n    print(scatter)\n```\n\nThe resulting tensor would look like this:\n\n    [[[5, 5, 5, 5], [6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8]],\n     [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],\n     [[5, 5, 5, 5], [6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8]],\n     [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]]\n\nNote that on CPU, if an out of bound index is found, an error is returned.\nOn GPU, if an out of bound index is found, the index is ignored.",
+    "description": "Scatter sparse `updates` according to individual values at the specified\n`indices`. This op returns an output tensor with the `shape` you specify. This\nop is the inverse of the `tf.gather_nd` operator which extracts values or slices\nfrom a given tensor.\n\nThis operation is similar to `tf.tensor_scatter_nd_add`, except that the tensor\nis zero-initialized. Calling `tf.scatter_nd(indices, updates, shape)`\nis identical to calling\n`tf.tensor_scatter_nd_add(tf.zeros(shape, updates.dtype), indices, updates)`\n\nIf `indices` contains duplicates, the associated `updates` are accumulated\n(summed) into the output tensor.\n\n**WARNING**: For floating-point data types, the output may be nondeterministic.\nThis is because the order in which the updates are applied is nondeterministic\nand when floating-point numbers are added in different orders the resulting\nnumerical approximation error can be slightly different. However, the output\nwill be deterministic if op determinism is enabled via\n`tf.config.experimental.enable_op_determinism`.\n\n`indices` is an integer tensor containing indices into the output tensor. The\nlast dimension of `indices` can be at most the rank of `shape`:\n\n    indices.shape[-1] <= shape.rank\n\nThe last dimension of `indices` corresponds to indices of elements\n(if `indices.shape[-1] = shape.rank`) or slices\n(if `indices.shape[-1] < shape.rank`) along dimension `indices.shape[-1]` of\n`shape`.\n\n`updates` is a tensor with shape:\n\n    indices.shape[:-1] + shape[indices.shape[-1]:]\n\nThe simplest form of the scatter op is to insert individual elements in\na tensor by index. Consider an example where you want to insert 4 scattered\nelements in a rank-1 tensor with 8 elements.\n\n<div style=\"width:70%; margin:auto; margin-bottom:10px; margin-top:20px;\">\n<img style=\"width:100%\" src=\"https://www.tensorflow.org/images/ScatterNd1.png\" alt>\n</div>\n\nIn Python, this scatter operation would look like this:\n\n```python\n    indices = tf.constant([[4], [3], [1], [7]])\n    updates = tf.constant([9, 10, 11, 12])\n    shape = tf.constant([8])\n    scatter = tf.scatter_nd(indices, updates, shape)\n    print(scatter)\n```\n\nThe resulting tensor would look like this:\n\n    [0, 11, 0, 10, 9, 0, 0, 12]\n\nYou can also insert entire slices of a higher rank tensor all at once. For\nexample, you can insert two slices in the first dimension of a rank-3 tensor\nwith two matrices of new values.\n\n<div style=\"width:70%; margin:auto; margin-bottom:10px; margin-top:20px;\">\n<img style=\"width:100%\" src=\"https://www.tensorflow.org/images/ScatterNd2.png\" alt>\n</div>\n\nIn Python, this scatter operation would look like this:\n\n```python\n    indices = tf.constant([[0], [2]])\n    updates = tf.constant([[[5, 5, 5, 5], [6, 6, 6, 6],\n                            [7, 7, 7, 7], [8, 8, 8, 8]],\n                           [[5, 5, 5, 5], [6, 6, 6, 6],\n                            [7, 7, 7, 7], [8, 8, 8, 8]]])\n    shape = tf.constant([4, 4, 4])\n    scatter = tf.scatter_nd(indices, updates, shape)\n    print(scatter)\n```\n\nThe resulting tensor would look like this:\n\n    [[[5, 5, 5, 5], [6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8]],\n     [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]],\n     [[5, 5, 5, 5], [6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8]],\n     [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]]\n\nNote that on CPU, if an out of bound index is found, an error is returned.\nOn GPU, if an out of bound index is found, the index is ignored.",
     "attributes": [
       {
         "name": "T",
@@ -46755,6 +47195,17 @@
     "name": "ShutdownDistributedTPU",
     "summary": "Shuts down a running distributed TPU system.",
     "description": "The op returns an error if no system is running."
+  },
+  {
+    "name": "ShutdownTPUSystem",
+    "summary": "An op that shuts down the TPU system.",
+    "outputs": [
+      {
+        "name": "success",
+        "description": "A boolean that indicates if the shut down process succeeds.",
+        "type": 10
+      }
+    ]
   },
   {
     "name": "Sigmoid",
@@ -53416,6 +53867,46 @@
     ]
   },
   {
+    "name": "StatelessShuffle",
+    "summary": "Randomly and deterministically shuffles a tensor along its first dimension.",
+    "description": "The tensor is shuffled along dimension 0, such that each `value[j]` is mapped\nto one and only one `output[i]`. For example, a mapping that might occur for a\n3x2 tensor is:\n\n```\n[[1, 2],       [[5, 6],\n [3, 4],  ==>   [1, 2],\n [5, 6]]        [3, 4]]\n```\n\nThe outputs are a deterministic function of `value`, `key`, `counter` and `alg`.",
+    "attributes": [
+      {
+        "name": "T",
+        "type": "type"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "value",
+        "description": "The tensor to be shuffled.",
+        "typeAttr": "T"
+      },
+      {
+        "name": "key",
+        "description": "Key for the counter-based RNG algorithm (shape uint64[1]).",
+        "type": 23
+      },
+      {
+        "name": "counter",
+        "description": "Initial counter for the counter-based RNG algorithm (shape uint64[2] or uint64[1] depending on the algorithm). If a larger vector is given, only the needed portion on the left (i.e. [:N]) will be used.",
+        "type": 23
+      },
+      {
+        "name": "alg",
+        "description": "The RNG algorithm (shape int32[]).",
+        "type": 3
+      }
+    ],
+    "outputs": [
+      {
+        "name": "output",
+        "description": "A tensor of same shape and type as `value`, shuffled along its first\ndimension.",
+        "typeAttr": "T"
+      }
+    ]
+  },
+  {
     "name": "StatelessTruncatedNormal",
     "summary": "Outputs deterministic pseudorandom values from a truncated normal distribution.",
     "description": "The generated values follow a normal distribution with mean 0 and standard\ndeviation 1, except that values whose magnitude is more than 2 standard\ndeviations from the mean are dropped and re-picked.\n\nThe outputs are a deterministic function of `shape` and `seed`.",
@@ -55121,6 +55612,11 @@
         "name": "use_spmd_for_xla_partitioning",
         "type": "boolean",
         "default": false
+      },
+      {
+        "name": "tpu_compile_options_proto",
+        "type": "string",
+        "default": ""
       }
     ]
   },
@@ -55221,6 +55717,17 @@
       {
         "name": "format_state_var",
         "type": 20
+      }
+    ]
+  },
+  {
+    "name": "TPURoundRobin",
+    "summary": "Round-robin load balancing on TPU cores.",
+    "description": "A load balancing op that round-robins among TPU cores.\n\nThis op round-robins between the integers in [0, NumTPUCoresVisiblePerHost]. It\nis useful for interfacing with TensorFlow ops that take as input a TPU core on\nwhich to execute computations, such as `TPUPartitionedCall`.\n\ndevice_ordinal: An integer in [0, NumTPUCoresVisiblePerHost].",
+    "outputs": [
+      {
+        "name": "device_ordinal",
+        "type": 3
       }
     ]
   },
@@ -57338,7 +57845,7 @@
   {
     "name": "TensorScatterAdd",
     "summary": "Adds sparse `updates` to an existing tensor according to `indices`.",
-    "description": "This operation creates a new tensor by adding sparse `updates` to the passed\nin `tensor`.\nThis operation is very similar to `tf.compat.v1.scatter_nd_add`, except that the updates\nare added onto an existing tensor (as opposed to a variable). If the memory\nfor the existing tensor cannot be re-used, a copy is made and updated.\n\n`indices` is an integer tensor containing indices into a new tensor of shape\n`tensor.shape`.  The last dimension of `indices` can be at most the rank of\n`tensor.shape`:\n\n    indices.shape[-1] <= tensor.shape.rank\n\nThe last dimension of `indices` corresponds to indices into elements\n(if `indices.shape[-1] = tensor.shape.rank`) or slices\n(if `indices.shape[-1] < tensor.shape.rank`) along dimension\n`indices.shape[-1]` of `tensor.shape`.  `updates` is a tensor with shape\n\n    indices.shape[:-1] + tensor.shape[indices.shape[-1]:]\n\nThe simplest form of `tensor_scatter_nd_add` is to add individual elements to a\ntensor by index. For example, say we want to add 4 elements in a rank-1\ntensor with 8 elements.\n\nIn Python, this scatter add operation would look like this:\n\n>>> indices = tf.constant([[4], [3], [1], [7]])\n>>> updates = tf.constant([9, 10, 11, 12])\n>>> tensor = tf.ones([8], dtype=tf.int32)\n>>> updated = tf.tensor_scatter_nd_add(tensor, indices, updates)\n<tf.Tensor: shape=(8,), dtype=int32, \nnumpy=array([ 1, 12,  1, 11, 10,  1,  1, 13], dtype=int32)>\n\nWe can also, insert entire slices of a higher rank tensor all at once. For\nexample, if we wanted to insert two slices in the first dimension of a\nrank-3 tensor with two matrices of new values.\n\nIn Python, this scatter add operation would look like this:\n\n>>> indices = tf.constant([[0], [2]])\n>>> updates = tf.constant([[[5, 5, 5, 5], [6, 6, 6, 6],\n                            [7, 7, 7, 7], [8, 8, 8, 8]],\n                           [[5, 5, 5, 5], [6, 6, 6, 6],\n                            [7, 7, 7, 7], [8, 8, 8, 8]]])\n>>> tensor = tf.ones([4, 4, 4],dtype=tf.int32)\n>>> updated = tf.tensor_scatter_nd_add(tensor, indices, updates)\n<tf.Tensor: shape=(4, 4, 4), dtype=int32, \nnumpy=array([[[6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8], [9, 9, 9, 9]],\n             [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]],\n             [[6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8], [9, 9, 9, 9]],\n             [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]]], dtype=int32)>\n\nNote: on CPU, if an out of bound index is found, an error is returned.\nOn GPU, if an out of bound index is found, the index is ignored.",
+    "description": "This operation creates a new tensor by adding sparse `updates` to the passed\nin `tensor`.\nThis operation is very similar to `tf.compat.v1.scatter_nd_add`, except that the\nupdates are added onto an existing tensor (as opposed to a variable). If the\nmemory for the existing tensor cannot be re-used, a copy is made and updated.\n\n`indices` is an integer tensor containing indices into a new tensor of shape\n`tensor.shape`.  The last dimension of `indices` can be at most the rank of\n`tensor.shape`:\n\n```\nindices.shape[-1] <= tensor.shape.rank\n```\n\nThe last dimension of `indices` corresponds to indices into elements\n(if `indices.shape[-1] = tensor.shape.rank`) or slices\n(if `indices.shape[-1] < tensor.shape.rank`) along dimension\n`indices.shape[-1]` of `tensor.shape`.  `updates` is a tensor with shape\n\n```\nindices.shape[:-1] + tensor.shape[indices.shape[-1]:]\n```\n\nThe simplest form of `tensor_scatter_nd_add` is to add individual elements to a\ntensor by index. For example, say we want to add 4 elements in a rank-1\ntensor with 8 elements.\n\nIn Python, this scatter add operation would look like this:\n\n>>> indices = tf.constant([[4], [3], [1], [7]])\n>>> updates = tf.constant([9, 10, 11, 12])\n>>> tensor = tf.ones([8], dtype=tf.int32)\n>>> updated = tf.tensor_scatter_nd_add(tensor, indices, updates)\n>>> updated\n<tf.Tensor: shape=(8,), dtype=int32,\nnumpy=array([ 1, 12,  1, 11, 10,  1,  1, 13], dtype=int32)>\n\nWe can also, insert entire slices of a higher rank tensor all at once. For\nexample, if we wanted to insert two slices in the first dimension of a\nrank-3 tensor with two matrices of new values.\n\nIn Python, this scatter add operation would look like this:\n\n>>> indices = tf.constant([[0], [2]])\n>>> updates = tf.constant([[[5, 5, 5, 5], [6, 6, 6, 6],\n...                         [7, 7, 7, 7], [8, 8, 8, 8]],\n...                        [[5, 5, 5, 5], [6, 6, 6, 6],\n...                         [7, 7, 7, 7], [8, 8, 8, 8]]])\n>>> tensor = tf.ones([4, 4, 4],dtype=tf.int32)\n>>> updated = tf.tensor_scatter_nd_add(tensor, indices, updates)\n>>> updated\n<tf.Tensor: shape=(4, 4, 4), dtype=int32,\nnumpy=array([[[6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8], [9, 9, 9, 9]],\n             [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]],\n             [[6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8], [9, 9, 9, 9]],\n             [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]]], dtype=int32)>\n\nNote: on CPU, if an out of bound index is found, an error is returned.\nOn GPU, if an out of bound index is found, the index is ignored.",
     "attributes": [
       {
         "name": "T",
@@ -57556,6 +58063,11 @@
         "name": "metadata",
         "type": "string",
         "default": ""
+      },
+      {
+        "name": "replicate_on_split",
+        "type": "boolean",
+        "default": false
       }
     ],
     "inputs": [
@@ -58185,6 +58697,23 @@
       {
         "name": "topk_indices",
         "type": 3
+      }
+    ]
+  },
+  {
+    "name": "TpuHandleToProtoKey",
+    "summary": "Converts XRT's uid handles to TensorFlow-friendly input format.",
+    "description": "Converts a uid handle for a compiled program into a vector of proto keys.\n\nXRT compile ops return uids, and the TensorFlow execute op takes a proto\nkey. This op enables a client to compile on TPU using XRT and execute using the\nstandard TensorFlow execute op.\n\n'uid' is the input handle.\n'proto_keys' is a vector of proto keys, one for each core program.",
+    "inputs": [
+      {
+        "name": "uid",
+        "type": 9
+      }
+    ],
+    "outputs": [
+      {
+        "name": "proto_keys",
+        "type": 7
       }
     ]
   },
@@ -59165,13 +59694,10 @@
   },
   {
     "name": "UnsortedSegmentJoin",
-    "summary": "Joins the elements of `inputs` based on `segment_ids`.",
-    "description": "Computes the string join along segments of a tensor.\nGiven `segment_ids` with rank `N` and `data` with rank `N+M`:\n\n    `output[i, k1...kM] = strings.join([data[j1...jN, k1...kM])`\n\nwhere the join is over all [j1...jN] such that segment_ids[j1...jN] = i.\nStrings are joined in row-major order.\n\nFor example:\n\n```python\ninputs = [['Y', 'q', 'c'], ['Y', '6', '6'], ['p', 'G', 'a']]\noutput_array = string_ops.unsorted_segment_join(inputs=inputs,\n                                                segment_ids=[1, 0, 1],\n                                                num_segments=2,\n                                                separator=':'))\n# output_array ==> [['Y', '6', '6'], ['Y:p', 'q:G', 'c:a']]\n\n\ninputs = ['this', 'is', 'a', 'test']\noutput_array = string_ops.unsorted_segment_join(inputs=inputs,\n                                                segment_ids=[0, 0, 0, 0],\n                                                num_segments=1,\n                                                separator=':'))\n# output_array ==> ['this:is:a:test']\n```",
     "attributes": [
       {
         "name": "separator",
         "type": "string",
-        "description": "The separator to use when joining.",
         "default": ""
       },
       {
@@ -59192,17 +59718,14 @@
     "inputs": [
       {
         "name": "inputs",
-        "description": "The input to be joined.",
         "type": 7
       },
       {
         "name": "segment_ids",
-        "description": "A tensor whose shape is a prefix of data.shape.  Negative segment ids are not\nsupported.",
         "typeAttr": "Tindices"
       },
       {
         "name": "num_segments",
-        "description": "A scalar.",
         "typeAttr": "Tnumsegments"
       }
     ],

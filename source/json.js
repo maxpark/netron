@@ -52,6 +52,8 @@ json.TextReader = class {
                     }
                     state = '';
                     continue;
+                default:
+                    break;
             }
         }
         return new json.TextReader(data);
@@ -154,6 +156,8 @@ json.TextReader = class {
                         case 'constructor':
                         case 'prototype':
                             throw new json.Error("Invalid key '" + key + "'" + this._location());
+                        default:
+                            break;
                     }
                     this._whitespace();
                     if (this._char !== ':') {
@@ -247,8 +251,9 @@ json.TextReader = class {
             case 'N': this._expect('NaN'); return NaN;
             case 'I': this._expect('Infinity'); return Infinity;
             case '-': return this._number();
+            default: this._unexpected();
         }
-        this._unexpected();
+        return null;
     }
 
     _number() {
@@ -350,9 +355,9 @@ json.TextReader = class {
         return value;
     }
 
-    _expect(text) {
-        for (let i = 0; i < text.length; i++) {
-            if (text[i] !== this._char) {
+    _expect(value) {
+        for (let i = 0; i < value.length; i++) {
+            if (value[i] !== this._char) {
                 this._unexpected();
             }
             this._next();
@@ -486,7 +491,7 @@ json.BinaryReader = class {
                     const size = view.getInt32(start, true);
                     const subtype = buffer[start + 4];
                     if (subtype !== 0x00) {
-                        throw new json.Error("Unknown binary subtype '" + subtype + "'.", true);
+                        throw new json.Error("Unsupported binary subtype '" + subtype + "'.", true);
                     }
                     skip(size);
                     value = buffer.subarray(start + 5, position);
@@ -522,8 +527,9 @@ json.BinaryReader = class {
                     value = view.getInt64(start, true).toNumber();
                     break;
                 }
-                default:
-                    throw new json.Error("Unknown value type '" + type + "'.", true);
+                default: {
+                    throw new json.Error("Unsupported value type '" + type + "'.", true);
+                }
             }
             if (Array.isArray(obj))  {
                 if (obj.length !== parseInt(key, 10)) {
@@ -537,6 +543,8 @@ json.BinaryReader = class {
                     case 'constructor':
                     case 'prototype':
                         throw new json.Error("Invalid key '" + key + "' at " + position.toString() + "'.", true);
+                    default:
+                        break;
                 }
                 obj[key] = value;
             }
