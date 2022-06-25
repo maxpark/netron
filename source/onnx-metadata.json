@@ -3334,7 +3334,7 @@
       {
         "name": "output",
         "type": "T2",
-        "description": "A Hann window with length: size. The output has the shape: [size]."
+        "description": "A Blackman window with length: size. The output has the shape: [size]."
       }
     ],
     "min_output": 1,
@@ -3370,7 +3370,7 @@
     "examples": [
       {
         "summary": "blackmanwindow",
-        "code": "node = onnx.helper.make_node(\n    'BlackmanWindow',\n    inputs=['x'],\n    outputs=['y'],\n)\nsize = np.int32(10)\na0 = 7938 / 18608\na1 = 9240 / 18608\na2 = 1430 / 18608\ny = a0\ny += a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / size)\ny += a2 * np.cos(4 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / size)\nexpect(node, inputs=[size], outputs=[y],\n       name='test_blackmanwindow')"
+        "code": "# Test periodic window\nnode = onnx.helper.make_node(\n    'BlackmanWindow',\n    inputs=['x'],\n    outputs=['y'],\n)\nsize = np.int32(10)\na0 = .42\na1 = -.5\na2 = .08\ny = a0\ny += a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / size)\ny += a2 * np.cos(4 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / size)\nexpect(node, inputs=[size], outputs=[y],\n       name='test_blackmanwindow')\n\n# Test symmetric window\nnode = onnx.helper.make_node(\n    'BlackmanWindow',\n    inputs=['x'],\n    outputs=['y'],\n    periodic=0\n)\nsize = np.int32(10)\na0 = .42\na1 = -.5\na2 = .08\ny = a0\ny += a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / (size - 1))\ny += a2 * np.cos(4 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / (size - 1))\nexpect(node, inputs=[size], outputs=[y],\n       name='test_blackmanwindow_symmetric')"
       }
     ]
   },
@@ -12017,7 +12017,7 @@
       {
         "name": "output",
         "type": "T2",
-        "description": "A Hann window with length: size. The output has the shape: [size]."
+        "description": "A Hamming window with length: size. The output has the shape: [size]."
       }
     ],
     "min_output": 1,
@@ -12053,7 +12053,7 @@
     "examples": [
       {
         "summary": "hammingwindow",
-        "code": "node = onnx.helper.make_node(\n    'HammingWindow',\n    inputs=['x'],\n    outputs=['y'],\n)\nsize = np.int32(10)\na0 = .5\na1 = .5\ny = a0 + a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / size)\nexpect(node, inputs=[size], outputs=[y],\n       name='test_hammingwindow')"
+        "code": "# Test periodic window\nnode = onnx.helper.make_node(\n    'HammingWindow',\n    inputs=['x'],\n    outputs=['y'],\n)\nsize = np.int32(10)\na0 = 25 / 46\na1 = 1 - a0\ny = a0 - a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / size)\nexpect(node, inputs=[size], outputs=[y],\n       name='test_hammingwindow')\n\n# Test symmetric window\nnode = onnx.helper.make_node(\n    'HammingWindow',\n    inputs=['x'],\n    outputs=['y'],\n    periodic=0\n)\nsize = np.int32(10)\na0 = 25 / 46\na1 = 1 - a0\ny = a0 - a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / (size - 1))\nexpect(node, inputs=[size], outputs=[y],\n       name='test_hammingwindow_symmetric')"
       }
     ]
   },
@@ -12128,7 +12128,7 @@
     "examples": [
       {
         "summary": "hannwindow",
-        "code": "node = onnx.helper.make_node(\n    'HannWindow',\n    inputs=['x'],\n    outputs=['y'],\n)\nsize = np.int32(10)\na0 = .5\na1 = .5\ny = a0 + a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / size)\nexpect(node, inputs=[size], outputs=[y],\n       name='test_hannwindow')"
+        "code": "# Test periodic window\nnode = onnx.helper.make_node(\n    'HannWindow',\n    inputs=['x'],\n    outputs=['y'],\n)\nsize = np.int32(10)\na0 = .5\na1 = .5\ny = a0 - a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / size)\nexpect(node, inputs=[size], outputs=[y],\n       name='test_hannwindow')\n\n# Test symmetric window\nnode = onnx.helper.make_node(\n    'HannWindow',\n    inputs=['x'],\n    outputs=['y'],\n    periodic=0\n)\nsize = np.int32(10)\na0 = .5\na1 = .5\ny = a0 - a1 * np.cos(2 * 3.1415 * np.arange(0, size, 1, dtype=np.float32) / (size - 1))\nexpect(node, inputs=[size], outputs=[y],\n       name='test_hannwindow_symmetric')"
       }
     ]
   },
@@ -14469,11 +14469,11 @@
       },
       {
         "summary": "d_epsilon",
-        "code": "X = np.random.randn(2, 3, 5).astype(np.float32)\n\ndef case(axis: int) -> None:\n    normalized_shape = calculate_normalized_shape(X.shape, axis)\n    W = np.random.randn(*normalized_shape).astype(np.float32)\n    B = np.random.randn(*normalized_shape).astype(np.float32)\n    Y, mean, inv_std_dev = _layer_normalization(X, W, B, axis)\n    node = onnx.helper.make_node(\n        'LayerNormalization',\n        inputs=['X', 'W', 'B'],\n        outputs=['Y', 'Mean', 'InvStdDev'],\n        axis=axis,\n        epsilon=1e-1\n    )\n\n    if axis < 0:\n        name = f'test_layer_normalization_3d_axis_negative_{-axis}_epsilon'\n    else:\n        name = f'test_layer_normalization_3d_axis{axis}_epsilon'\n\n    expect(node, inputs=[X, W, B], outputs=[Y, mean, inv_std_dev],\n           name=name)\n\nfor i in range(len(X.shape)):\n    case(i)\n    case(i - len(X.shape))"
+        "code": "epsilon = 1e-1\nX = np.random.randn(2, 3, 5).astype(np.float32)\n\ndef case(axis: int) -> None:\n    normalized_shape = calculate_normalized_shape(X.shape, axis)\n    W = np.random.randn(*normalized_shape).astype(np.float32)\n    B = np.random.randn(*normalized_shape).astype(np.float32)\n    Y, mean, inv_std_dev = _layer_normalization(X, W, B, axis, epsilon)\n    node = onnx.helper.make_node(\n        'LayerNormalization',\n        inputs=['X', 'W', 'B'],\n        outputs=['Y', 'Mean', 'InvStdDev'],\n        axis=axis,\n        epsilon=epsilon\n    )\n\n    if axis < 0:\n        name = f'test_layer_normalization_3d_axis_negative_{-axis}_epsilon'\n    else:\n        name = f'test_layer_normalization_3d_axis{axis}_epsilon'\n\n    expect(node, inputs=[X, W, B], outputs=[Y, mean, inv_std_dev],\n           name=name)\n\nfor i in range(len(X.shape)):\n    case(i)\n    case(i - len(X.shape))"
       },
       {
         "summary": "default_axis",
-        "code": "X = np.random.randn(2, 3, 4, 5).astype(np.float32)\n\n# Default axis in LayerNormalization is -1.\nnormalized_shape = calculate_normalized_shape(X.shape, -1)\nW = np.random.randn(*normalized_shape).astype(np.float32)\nB = np.random.randn(*normalized_shape).astype(np.float32)\n# Axis is default to -1 in the reference implementation.\nY, mean, inv_std_dev = _layer_normalization(X, W, B)\n\n# Not specifying axis attribute means -1.\nnode = onnx.helper.make_node(\n    'LayerNormalization',\n    inputs=['X', 'W', 'B'],\n    outputs=['Y', 'Mean', 'InvStdDev']\n)\n\nexpect(node, inputs=[X, W, B], outputs=[Y, mean, inv_std_dev],\n        name='test_layer_normalization_default_axis')"
+        "code": "X = np.random.randn(2, 3, 4, 5).astype(np.float32)\n\n# Default axis in LayerNormalization is -1.\nnormalized_shape = calculate_normalized_shape(X.shape, -1)\nW = np.random.randn(*normalized_shape).astype(np.float32)\nB = np.random.randn(*normalized_shape).astype(np.float32)\n# Axis is default to -1 in the reference implementation.\nY, mean, inv_std_dev = _layer_normalization(X, W, B)\n\n# Not specifying axis attribute means -1.\nnode = onnx.helper.make_node(\n    'LayerNormalization',\n    inputs=['X', 'W', 'B'],\n    outputs=['Y', 'Mean', 'InvStdDev']\n)\n\nexpect(node, inputs=[X, W, B], outputs=[Y, mean, inv_std_dev],\n       name='test_layer_normalization_default_axis')"
       },
       {
         "summary": "layernormalization",
@@ -18011,7 +18011,7 @@
     "module": "ai.onnx",
     "version": 17,
     "support_level": "common",
-    "description": "Generate a MelWeightMatrix that can be used to re-weight a Tensor containing a linearly sampled frequency spectra (from DFT or STFT) into num_mel_bins frequency information based on the [lower_edge_hertz, upper_edge_hertz] range on the mel scale.\nThis function defines the mel scale in terms of a frequency in hertz according to the following formula:\n    \n    mel(f) = 2595 * log10(1 + f/700)\n\nIn the returned matrix, all the triangles (filterbanks) have a peak value of 1.0.\n\nThe returned MelWeightMatrix can be used to right-multiply a spectrogram S of shape [frames, num_spectrogram_bins] of linear scale spectrum values (e.g. STFT magnitudes) to generate a \"mel spectrogram\" M of shape [frames, num_mel_bins].\n",
+    "description": "Generate a MelWeightMatrix that can be used to re-weight a Tensor containing a linearly sampled frequency spectra (from DFT or STFT) into num_mel_bins frequency information based on the [lower_edge_hertz, upper_edge_hertz] range on the mel scale.\nThis function defines the mel scale in terms of a frequency in hertz according to the following formula:\n\n    mel(f) = 2595 * log10(1 + f/700)\n\nIn the returned matrix, all the triangles (filterbanks) have a peak value of 1.0.\n\nThe returned MelWeightMatrix can be used to right-multiply a spectrogram S of shape [frames, num_spectrogram_bins] of linear scale spectrum values (e.g. STFT magnitudes) to generate a \"mel spectrogram\" M of shape [frames, num_mel_bins].\n",
     "attributes": [
       {
         "name": "output_datatype",
@@ -21682,7 +21682,7 @@
     "module": "ai.onnx",
     "version": 10,
     "support_level": "common",
-    "description": "Matrix product that behaves like numpy.matmul: https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.matmul.html.\nIt consumes two quantized input tensors, their scales and zero points, scale and zero point of output, \nand computes the quantized output. The quantization formula is y = saturate((x / y_scale) + y_zero_point). \nFor (x / y_scale), it is rounding to nearest ties to even. Refer to https://en.wikipedia.org/wiki/Rounding for details. \nScale and zero point must have same shape. They must be either scalar (per tensor) or N-D tensor \n(per row for 'a' and per column for 'b'). Scalar refers to per tensor quantization whereas N-D refers to per row \nor per column quantization. If the input is 2D of shape [M, K] then zero point and scale tensor may be \nan M element vector [v_1, v_2, ..., v_M] for per row quantization and K element vector of shape [v_1, v_2, ..., v_K] \nfor per column quantization. If the input is N-D tensor with shape [D1, D2, M, K] then zero point and scale tensor may \nhave shape [D1, D2, M, 1] for per row quantization and shape [D1, D2, 1, K] for per column quantization.\nProduction must never overflow, and accumulation may overflow if and only if in 32 bits.\n",
+    "description": "Matrix product that behaves like numpy.matmul: https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.matmul.html.\nIt consumes two quantized input tensors, their scales and zero points, scale and zero point of output,\nand computes the quantized output. The quantization formula is y = saturate((x / y_scale) + y_zero_point).\nFor (x / y_scale), it is rounding to nearest ties to even. Refer to https://en.wikipedia.org/wiki/Rounding for details.\nScale and zero point must have same shape. They must be either scalar (per tensor) or N-D tensor\n(per row for 'a' and per column for 'b'). Scalar refers to per tensor quantization whereas N-D refers to per row\nor per column quantization. If the input is 2D of shape [M, K] then zero point and scale tensor may be\nan M element vector [v_1, v_2, ..., v_M] for per row quantization and K element vector of shape [v_1, v_2, ..., v_K]\nfor per column quantization. If the input is N-D tensor with shape [D1, D2, M, K] then zero point and scale tensor may\nhave shape [D1, D2, M, 1] for per row quantization and shape [D1, D2, 1, K] for per column quantization.\nProduction must never overflow, and accumulation may overflow if and only if in 32 bits.\n",
     "inputs": [
       {
         "name": "a",
@@ -26609,7 +26609,7 @@
     "examples": [
       {
         "summary": "stft",
-        "code": "signal = np.arange(0, 128, dtype=np.float32).reshape(1, 128, 1)\nlength = np.array(16).astype(np.int64)\nstep = np.array(8).astype(np.int64)\n\nno_window = \"\"  # optional input, not supplied\nnode = onnx.helper.make_node(\n    'STFT',\n    inputs=['signal', 'frame_step', no_window, 'frame_length'],\n    outputs=['output'],\n)\n\nnstfts = ((signal.shape[1] - length) // step) + 1\n# [batch_size][frames][frame_length][2]\noutput = np.empty([1, nstfts, length, 2], dtype=np.float32)\nfor i in range(nstfts):\n    start = i * step\n    stop = i * step + length\n    complex_out = np.fft.fft(signal[0, start:stop, 0])\n    output[0, i] = np.stack((complex_out.real, complex_out.imag), axis=1)\n\nexpect(node, inputs=[signal, step, length], outputs=[output],\n       name='test_stft')\n\nnode = onnx.helper.make_node(\n    'STFT',\n    inputs=['signal', 'frame_step', 'window'],\n    outputs=['output'],\n)\n\n# Test with window\na0 = .5\na1 = .5\nwindow = a0 + a1 * np.cos(2 * 3.1415 * np.arange(0, length, 1, dtype=np.float32) / length)\nnstfts = 1 + (signal.shape[1] - window.shape[0]) // step\n\n# [batch_size][frames][frame_length][2]\noutput = np.empty([1, nstfts, length, 2], dtype=np.float32)\nfor i in range(nstfts):\n    start = i * step\n    stop = i * step + length\n    complex_out = np.fft.fft(signal[0, start:stop, 0] * window)\n    output[0, i] = np.stack((complex_out.real, complex_out.imag), axis=1)\nexpect(node, inputs=[signal, step, window], outputs=[output],\n       name='test_stft_with_window')"
+        "code": "signal = np.arange(0, 128, dtype=np.float32).reshape(1, 128, 1)\nlength = np.array(16).astype(np.int64)\nonesided_length = (length >> 1) + 1\nstep = np.array(8).astype(np.int64)\n\nno_window = \"\"  # optional input, not supplied\nnode = onnx.helper.make_node(\n    'STFT',\n    inputs=['signal', 'frame_step', no_window, 'frame_length'],\n    outputs=['output'],\n)\n\nnstfts = ((signal.shape[1] - length) // step) + 1\n# [batch_size][frames][frame_length][2]\noutput = np.empty([1, nstfts, onesided_length, 2], dtype=np.float32)\nfor i in range(nstfts):\n    start = i * step\n    stop = i * step + length\n    complex_out = np.fft.fft(signal[0, start:stop, 0])[0:onesided_length]\n    output[0, i] = np.stack((complex_out.real, complex_out.imag), axis=1)\n\nexpect(node, inputs=[signal, step, length], outputs=[output],\n       name='test_stft')\n\nnode = onnx.helper.make_node(\n    'STFT',\n    inputs=['signal', 'frame_step', 'window'],\n    outputs=['output'],\n)\n\n# Test with window\na0 = .5\na1 = .5\nwindow = a0 + a1 * np.cos(2 * 3.1415 * np.arange(0, length, 1, dtype=np.float32) / length)\nnstfts = 1 + (signal.shape[1] - window.shape[0]) // step\n\n# [batch_size][frames][frame_length][2]\noutput = np.empty([1, nstfts, onesided_length, 2], dtype=np.float32)\nfor i in range(nstfts):\n    start = i * step\n    stop = i * step + length\n    complex_out = np.fft.fft(signal[0, start:stop, 0] * window)[0:onesided_length]\n    output[0, i] = np.stack((complex_out.real, complex_out.imag), axis=1)\nexpect(node, inputs=[signal, step, window], outputs=[output],\n       name='test_stft_with_window')"
       }
     ]
   },
